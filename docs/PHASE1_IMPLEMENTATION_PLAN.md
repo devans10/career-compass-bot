@@ -11,13 +11,13 @@
 - Google Sheets credentials are supplied via environment variables and mounted secrets; no credentials live in the repo.
 - Hosting target is a single-process Docker container running on a DigitalOcean droplet, with optional external cron for scheduling.
 
-## Deliverables
-- Functional Telegram bot with `/start`, `/help`, `/log`, `/task`, `/idea`, `/week`, `/month` commands.
-- Google Sheets integration with append/query capabilities and documented schema.
-- Scheduler for weekly reminders (in-process or cron-friendly entry point).
-- Configuration and logging setup with .env.example for local runs.
-- Automated tests for parsing and command behavior.
-- Minimal deployment docs for running the bot.
+## Deliverables *(Complete)*
+- Functional Telegram bot with `/start`, `/help`, `/log`, `/task`, `/idea`, `/week`, `/month` commands. **Complete**
+- Google Sheets integration with append/query capabilities and documented schema. **Complete**
+- Scheduler for weekly reminders (in-process or cron-friendly entry point). **Complete**
+- Configuration and logging setup with .env.example for local runs. **Complete**
+- Automated tests for parsing and command behavior. **Complete**
+- Minimal deployment docs for running the bot. **Complete**
 
 ## Workstreams and Tasks
 
@@ -46,31 +46,34 @@
 - Scheduler can be started from the main process or invoked by external cron via `send_reminder_now`.
 - Drafted reminder message templates (e.g., prompt for top accomplishments).
 
-### 5) Configuration & Secrets
+### 5) Configuration & Secrets *(Complete)*
 - Centralize configuration in `src/config.py` with environment-driven settings (tokens, spreadsheet ID, credential path/JSON, timezone, reminder schedule).
 - Provide `.env.example` covering required variables.
 - Guard against missing config with clear startup validation errors.
 
-### 6) Logging & Observability
+### 6) Logging & Observability *(Complete)*
 - Standardize logging via `src/logging_config.py` (levels, formats).
 - Add contextual logs for command handling and storage operations.
 
-### 7) Testing & QA
+### 7) Testing & QA *(Complete)*
 - Expand unit tests in `tests/` for parsing utilities and command behavior (mock Telegram/storage layers).
 - Add integration-style test for storage client using a stub/mocked Google Sheets service if feasible.
 - Lint/type checks as defined in the repository tooling (e.g., `pytest`, `ruff`, `mypy` if configured).
 
-### 8) Deployment & Operations
+### 8) Deployment & Operations *(Complete)*
 - Provide runbook in README or docs covering local run (`python -m src.bot.main`), dependency installation, and environment setup.
 - Outline deployment steps for containerized environment (build image, configure secrets, run scheduler).
 - Document monitoring basics (log inspection, handling API quota errors).
 
-## Milestones
-- **M1: Bot Skeleton** – Bot starts, `/start` and `/help` respond, logging infrastructure in place.
-- **M2: Command Execution** – `/log`, `/task`, `/idea` write to Google Sheets; basic validation and confirmations.
-- **M3: Retrieval** – `/week` and `/month` return formatted summaries from stored entries.
-- **M4: Scheduling** – Weekly reminder job running and configurable.
-- **M5: Quality & Docs** – Tests passing; `.env.example` updated; deployment/runbook documented.
+## Milestones *(Complete)*
+- **M1: Bot Skeleton** – Bot starts, `/start` and `/help` respond, logging infrastructure in place. **Complete**
+- **M2: Command Execution** – `/log`, `/task`, `/idea` write to Google Sheets; basic validation and confirmations. **Complete**
+- **M3: Retrieval** – `/week` and `/month` return formatted summaries from stored entries. **Complete**
+- **M4: Scheduling** – Weekly reminder job running and configurable. **Complete**
+- **M5: Quality & Docs** – Tests passing; `.env.example` updated; deployment/runbook documented. **Complete**
+
+## User Acceptance Testing Checklist
+The checklist is maintained as a standalone document to support ongoing regression testing. See [User Acceptance Testing Checklist](./USER_ACCEPTANCE_TESTING_CHECKLIST.md) for the latest items.
 
 ## Risks and Mitigations
 - **Google Sheets quota or auth errors**: implement retries, clear error messages, and document credential setup.
