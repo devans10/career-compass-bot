@@ -1,0 +1,52 @@
+name: CI + SonarCloud
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-test-analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # important so Sonar can compare branches for PR analysis
+
+      # --- language/toolchain setup (examples, pick what fits your stack) ---
+      # For Python:
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      #
+      # For Node:
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '22'
+
+      - name: Install deps
+        run: |
+          # replace with your real install commands
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          # Example for Python with pytest + coverage XML
+          pytest --cov=src --cov-report=xml:coverage.xml
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # If you configured sonar-project.properties, you can often omit args
+          args: >
+            -Dsonar.organization=my-org
+            -Dsonar.projectKey=career-compass-bot
+            -Dsonar.python.coverage.reportPaths=coverage.xml
