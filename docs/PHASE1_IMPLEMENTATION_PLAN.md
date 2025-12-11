@@ -26,7 +26,7 @@
 - Implement user-facing handlers in `src/bot/handlers.py`, including error handling and friendly messages for unknown commands.
 - Add `/start` and `/help` responses with usage examples.
 
-### 2) Command & Journal Agent
+### 2) Command & Journal Agent *(Complete)*
 - Implement parsing helpers in `src/bot/parsing.py` (command argument extraction, tag parsing, entry normalization).
 - Implement core command functions in `src/bot/commands.py`:
   - `/log`, `/task`, `/idea` → normalize entry types, extract tags, build record, call storage, return confirmation.

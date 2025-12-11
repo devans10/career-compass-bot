@@ -1,13 +1,20 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from typing import Dict, List
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.bot.parsing import extract_tags
+from src.bot.parsing import extract_command_argument, extract_tags, normalize_entry
 
 
 logger = logging.getLogger(__name__)
+MAX_ENTRY_LENGTH = 1000
+ENTRY_TYPES = {
+    "accomplishment": "Logged accomplishment",
+    "task": "Logged task",
+    "idea": "Logged idea",
+}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -62,15 +69,15 @@ async def log_idea(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def get_week_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Retrieve a placeholder summary for the last 7 days."""
+    """Retrieve a summary for the last 7 days."""
 
-    await _send_summary(update, days=7)
+    await _send_summary(update, context, days=7)
 
 
 async def get_month_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Retrieve a placeholder summary for the last 30 days."""
+    """Retrieve a summary for the last 30 days."""
 
-    await _send_summary(update, days=30)
+    await _send_summary(update, context, days=30)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -100,21 +107,106 @@ async def _log_with_type(
         return
 
     message_text = update.message.text or ""
-    tags = extract_tags(message_text)
+    entry_text = extract_command_argument(message_text)
 
-    logger.debug("Received %s entry: %s", entry_type, message_text)
-    await update.message.reply_text(
-        f"(Placeholder) Logged {entry_type}: {message_text}\nTags: {' '.join(tags)}"
-    )
+    if not entry_text:
+        await update.message.reply_text("Please include some text after the command to log it.")
+        return
+
+    if len(entry_text) > MAX_ENTRY_LENGTH:
+        await update.message.reply_text("That message is a bit long. Please keep it under 1000 characters.")
+        return
+
+    tags = extract_tags(entry_text)
+    record = normalize_entry(entry_text, entry_type=entry_type, tags=tags)
+
+    logger.info("Logging %s entry", entry_type)
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text(
+            "Storage is not configured yet, so I couldn't save that entry. Please try again later."
+        )
+        return
+
+    try:
+        storage_client.append_entry(record)
+    except Exception:
+        logger.exception("Failed to append entry to storage")
+        await update.message.reply_text(
+            "Sorry, I couldn't save that right now. Please try again in a moment."
+        )
+        return
+
+    confirmation = ENTRY_TYPES.get(entry_type, "Logged entry")
+    tag_text = f"\nTags: {' '.join(tags)}" if tags else ""
+    await update.message.reply_text(f"{confirmation}: {entry_text}{tag_text}")
 
 
-async def _send_summary(update: Update, days: int) -> None:
-    """Placeholder summary response based on the requested range."""
+async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days: int) -> None:
+    """Build and send a summary response based on the requested range."""
 
     if not update.message:
         return
 
-    start_date = (datetime.utcnow() - timedelta(days=days)).date()
-    await update.message.reply_text(
-        f"(Placeholder) Showing entries since {start_date.isoformat()} for the last {days} days."
-    )
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text(
+            "Storage is not configured yet, so I can't fetch entries. Please try again later."
+        )
+        return
+
+    start_date = _start_date_for_range(days)
+    end_date = date.today()
+
+    try:
+        entries = storage_client.get_entries_by_date_range(
+            start_date.isoformat(), end_date.isoformat()
+        )
+    except Exception:
+        logger.exception("Failed to fetch summary from storage")
+        await update.message.reply_text(
+            "Sorry, I couldn't retrieve entries right now. Please try again later."
+        )
+        return
+
+    summary = _format_summary(entries, start_date, end_date)
+    await update.message.reply_text(summary)
+
+
+def _get_storage_client(context: ContextTypes.DEFAULT_TYPE):
+    """Retrieve the storage client from the application context."""
+
+    if not hasattr(context, "application"):
+        return None
+
+    return context.application.bot_data.get("storage_client")
+
+
+def _start_date_for_range(days: int) -> date:
+    """Return the starting date for the given window inclusive of today."""
+
+    offset = max(days - 1, 0)
+    return date.today() - timedelta(days=offset)
+
+
+def _format_summary(entries: List[Dict[str, str]], start_date: date, end_date: date) -> str:
+    """Create a user-friendly summary from retrieved entries."""
+
+    if not entries:
+        days = (end_date - start_date).days + 1
+        return f"No entries found for the last {days} days."
+
+    lines: List[str] = [
+        f"Entries from {start_date.isoformat()} to {end_date.isoformat()}:",
+    ]
+
+    for entry in entries:
+        entry_date = entry.get("date") or entry.get("timestamp", "")
+        entry_type = entry.get("type", "entry").capitalize()
+        text = entry.get("text", "").strip()
+        tags = entry.get("tags", "")
+        tag_suffix = f" ({tags})" if tags else ""
+        lines.append(f"• [{entry_type}] {entry_date}: {text}{tag_suffix}")
+
+    return "\n".join(lines)
