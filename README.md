@@ -103,12 +103,18 @@ cp .env.example .env
 ```
 
 Then fill in:
-| Variable| Description |
-|---------|-------------|
-| TELEGRAM_BOT_TOKEN            | Token provided by BotFather
-| GOOGLE_SHEET_ID               | ID of your Google Sheet
-| GOOGLE_SERVICE_ACCOUNT_JSON	| Path to your service account JSON file
-| TIMEZONE	                    | Local timezone (e.g., America/New_York)
+| Variable | Description |
+|----------|-------------|
+| TELEGRAM_BOT_TOKEN          | Token provided by BotFather |
+| SPREADSHEET_ID              | ID of your Google Sheet |
+| SERVICE_ACCOUNT_FILE        | Path to your service account JSON file |
+| LOG_LEVEL                   | Logging level (INFO by default) |
+| TIMEZONE                    | Local timezone (e.g., America/New_York) |
+| REMINDERS_ENABLED           | Set to `false` to disable scheduled reminders |
+| REMINDER_CHAT_ID            | Telegram chat ID to receive reminders |
+| REMINDER_DAY_OF_WEEK        | Day to send reminders (cron-style string, e.g., `fri`) |
+| REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
+| REMINDER_MESSAGE            | Custom reminder text |
 
 ---
 ### 4. Enable Google Sheets API
@@ -168,10 +174,10 @@ Career Compass Bot can ping you once a week:
     “Weekly check-in: what were your top 3 accomplishments this week?”
 
 Reminders are triggered via:
-- An in-process scheduler (scheduler.py), or
-- An external cron job hitting a reminder script.
+- An in-process scheduler (enabled automatically when `REMINDER_CHAT_ID` is set), or
+- An external cron job that calls `send_reminder_now` from `src/bot/scheduler.py`.
 
-Configuration details are in `src/bot/scheduler.py`.
+Tune the cadence and message with `REMINDER_DAY_OF_WEEK`, `REMINDER_TIME`, and `REMINDER_MESSAGE`.
 
 
 ## 🧪 Testing

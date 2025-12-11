@@ -41,10 +41,10 @@
 - Add retry/backoff around API calls and structured logging for failures.
 - Provide a small utility to bootstrap the sheet (headers, tab name) or document manual setup steps.
 
-### 4) Scheduler / Reminder Agent
-- Implement weekly reminder job in `src/bot/scheduler.py` (configurable weekday/time, timezone-aware).
-- Ensure scheduler can be started from main process or invoked by external cron (expose callable entry point).
-- Draft reminder message templates (e.g., prompt for top accomplishments).
+### 4) Scheduler / Reminder Agent *(Complete)*
+- Implemented weekly reminder job in `src/bot/scheduler.py` (configurable weekday/time, timezone-aware).
+- Scheduler can be started from the main process or invoked by external cron via `send_reminder_now`.
+- Drafted reminder message templates (e.g., prompt for top accomplishments).
 
 ### 5) Configuration & Secrets
 - Centralize configuration in `src/config.py` with environment-driven settings (tokens, spreadsheet ID, credential path/JSON, timezone, reminder schedule).

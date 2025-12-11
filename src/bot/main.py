@@ -3,6 +3,7 @@ import logging
 from telegram.ext import Application, ApplicationBuilder
 
 from src.bot.handlers import register_handlers
+from src.bot.scheduler import start_scheduler_from_config
 from src.config import load_config
 from src.logging_config import configure_logging
 from src.storage.google_sheets_client import GoogleSheetsClient
@@ -34,6 +35,7 @@ def build_application() -> Application:
         logger.warning("SPREADSHEET_ID not configured; storage features will be unavailable")
 
     logger.info("Telegram application initialized")
+    start_scheduler_from_config(application, config)
     return application
 
 
