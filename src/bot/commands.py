@@ -130,7 +130,7 @@ async def _log_with_type(
         return
 
     try:
-        storage_client.append_entry(record)
+        await storage_client.append_entry_async(record)
     except Exception:
         logger.exception("Failed to append entry to storage")
         await update.message.reply_text(
@@ -160,7 +160,7 @@ async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days
     end_date = date.today()
 
     try:
-        entries = storage_client.get_entries_by_date_range(
+        entries = await storage_client.get_entries_by_date_range_async(
             start_date.isoformat(), end_date.isoformat()
         )
     except Exception:

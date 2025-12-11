@@ -41,12 +41,13 @@ def test_log_rejects_long_text():
 
 def test_log_saves_entry_and_confirms():
     storage_client = MagicMock()
+    storage_client.append_entry_async = AsyncMock()
     update = _make_update("/task Finish docs #writing")
     context = _make_context(storage_client)
 
     asyncio.run(commands.log_task(update, context))
 
-    storage_client.append_entry.assert_called_once()
+    storage_client.append_entry_async.assert_called_once()
     update.message.reply_text.assert_called_with("Logged task: Finish docs #writing\nTags: #writing")
 
 
@@ -63,7 +64,7 @@ def test_summary_without_storage():
 
 def test_summary_formats_entries():
     storage_client = MagicMock()
-    storage_client.get_entries_by_date_range.return_value = [
+    storage_client.get_entries_by_date_range_async = AsyncMock(return_value=[
         {
             "date": "2024-05-01",
             "type": "accomplishment",
@@ -76,7 +77,7 @@ def test_summary_formats_entries():
             "text": "Schedule retro",
             "tags": "",
         },
-    ]
+    ])
     update = _make_update("/month")
     context = _make_context(storage_client)
 
