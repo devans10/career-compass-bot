@@ -20,6 +20,11 @@ ENTRY_TYPES = {
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a welcome message and basic instructions."""
 
+    if update.effective_user:
+        logger.info(
+            "Received /start command",
+            extra={"user_id": update.effective_user.id, "username": update.effective_user.username},
+        )
     message = (
         "Welcome to Career Compass Bot! 🎯\n\n"
         "I can help you keep a running log of accomplishments, tasks, and ideas. "
@@ -37,6 +42,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Provide a list of available commands."""
 
+    if update.effective_user:
+        logger.info(
+            "Received /help command",
+            extra={"user_id": update.effective_user.id, "username": update.effective_user.username},
+        )
     help_text = (
         "Here are some examples to try:\n\n"
         "• /log Built a prototype for the new dashboard\n"
@@ -53,30 +63,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def log_accomplishment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Placeholder for logging an accomplishment."""
 
+    logger.info("Handling /log command", extra=_user_context(update))
     await _log_with_type(update, context, entry_type="accomplishment")
 
 
 async def log_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Placeholder for logging a task."""
 
+    logger.info("Handling /task command", extra=_user_context(update))
     await _log_with_type(update, context, entry_type="task")
 
 
 async def log_idea(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Placeholder for logging an idea."""
 
+    logger.info("Handling /idea command", extra=_user_context(update))
     await _log_with_type(update, context, entry_type="idea")
 
 
 async def get_week_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Retrieve a summary for the last 7 days."""
 
+    logger.info("Handling /week command", extra=_user_context(update))
     await _send_summary(update, context, days=7)
 
 
 async def get_month_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Retrieve a summary for the last 30 days."""
 
+    logger.info("Handling /month command", extra=_user_context(update))
     await _send_summary(update, context, days=30)
 
 
@@ -86,6 +101,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not update.message:
         return
 
+    logger.info(
+        "Received free-form message", extra={**_user_context(update), "text_length": len(update.message.text or "")}
+    )
     await update.message.reply_text(
         "I can log your updates! Try /log, /task, or /idea followed by your text."
     )
@@ -94,6 +112,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def handle_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle unknown commands gracefully."""
 
+    logger.warning("Unknown command received", extra=_user_context(update))
     if update.message:
         await update.message.reply_text("Sorry, I don't recognize that command. Try /help for options.")
 
@@ -109,6 +128,15 @@ async def _log_with_type(
     message_text = update.message.text or ""
     entry_text = extract_command_argument(message_text)
 
+    logger.info(
+        "Processing structured entry",
+        extra={
+            **_user_context(update),
+            "entry_type": entry_type,
+            "text_length": len(entry_text or ""),
+        },
+    )
+
     if not entry_text:
         await update.message.reply_text("Please include some text after the command to log it.")
         return
@@ -120,10 +148,9 @@ async def _log_with_type(
     tags = extract_tags(entry_text)
     record = normalize_entry(entry_text, entry_type=entry_type, tags=tags)
 
-    logger.info("Logging %s entry", entry_type)
-
     storage_client = _get_storage_client(context)
     if not storage_client:
+        logger.error("Storage client missing", extra=_user_context(update))
         await update.message.reply_text(
             "Storage is not configured yet, so I couldn't save that entry. Please try again later."
         )
@@ -132,7 +159,7 @@ async def _log_with_type(
     try:
         await storage_client.append_entry_async(record)
     except Exception:
-        logger.exception("Failed to append entry to storage")
+        logger.exception("Failed to append entry to storage", extra=_user_context(update))
         await update.message.reply_text(
             "Sorry, I couldn't save that right now. Please try again in a moment."
         )
@@ -160,11 +187,15 @@ async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days
     end_date = date.today()
 
     try:
+        logger.info(
+            "Fetching summary",
+            extra={**_user_context(update), "start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+        )
         entries = await storage_client.get_entries_by_date_range_async(
             start_date.isoformat(), end_date.isoformat()
         )
     except Exception:
-        logger.exception("Failed to fetch summary from storage")
+        logger.exception("Failed to fetch summary from storage", extra=_user_context(update))
         await update.message.reply_text(
             "Sorry, I couldn't retrieve entries right now. Please try again later."
         )
@@ -172,6 +203,17 @@ async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days
 
     summary = _format_summary(entries, start_date, end_date)
     await update.message.reply_text(summary)
+
+
+def _user_context(update: Update) -> Dict[str, object]:
+    """Extract a minimal context dict for logging purposes."""
+
+    user = update.effective_user if isinstance(update, Update) else None
+    return {
+        "user_id": getattr(user, "id", "unknown"),
+        "username": getattr(user, "username", None),
+        "chat_id": getattr(getattr(update, "effective_chat", None), "id", None),
+    }
 
 
 def _get_storage_client(context: ContextTypes.DEFAULT_TYPE):

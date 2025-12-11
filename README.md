@@ -117,6 +117,13 @@ Then fill in:
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
 
+### Logging
+
+Logs are written to standard output for both local CLI runs and containerized deployments.
+Timestamps honor the configured `TIMEZONE` and follow the format
+`YYYY-MM-DDTHH:MM:SS±ZZZZ | LEVEL | logger | message`. Adjust verbosity with `LOG_LEVEL`
+(INFO by default).
+
 ---
 ### 4. Enable Google Sheets API
 1. Create a Google Cloud project

@@ -78,16 +78,25 @@ class ReminderScheduler:
     def _enqueue_reminder(self) -> None:
         """Push the reminder coroutine into the Telegram application's event loop."""
 
+        logger.info(
+            "Queueing reminder send",
+            extra={"chat_id": self.chat_id, "reminder_message": self.reminder_message[:80]},
+        )
         asyncio.run_coroutine_threadsafe(self._send_reminder(), self.loop)
 
     async def _send_reminder(self) -> None:
         """Send the reminder message to the configured chat."""
 
-        await self.application.bot.send_message(chat_id=self.chat_id, text=self.reminder_message)
+        try:
+            await self.application.bot.send_message(chat_id=self.chat_id, text=self.reminder_message)
+            logger.info("Reminder sent", extra={"chat_id": self.chat_id})
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to send reminder", extra={"chat_id": self.chat_id})
 
     def send_once(self) -> asyncio.Task[None]:
         """Trigger a reminder immediately (useful for cron or manual runs)."""
 
+        logger.info("Dispatching immediate reminder", extra={"chat_id": self.chat_id})
         return self.application.create_task(self._send_reminder())
 
     def shutdown(self) -> None:

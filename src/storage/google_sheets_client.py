@@ -50,7 +50,10 @@ class GoogleSheetsClient:
             record.get("source", ""),
         ]
 
-        logger.info("Appending entry to Google Sheet", extra={"sheet": self.sheet_name})
+        logger.info(
+            "Appending entry to Google Sheet",
+            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
+        )
 
         def _execute_append():
             request = (
@@ -81,7 +84,12 @@ class GoogleSheetsClient:
 
         logger.info(
             "Fetching entries from Google Sheet",
-            extra={"sheet": self.sheet_name, "start_date": start_date, "end_date": end_date},
+            extra={
+                "sheet": self.sheet_name,
+                "spreadsheet_id": self.spreadsheet_id,
+                "start_date": start_date,
+                "end_date": end_date,
+            },
         )
 
         def _execute_get():
@@ -149,7 +157,10 @@ class GoogleSheetsClient:
         if self.sheet_name in sheet_titles:
             return
 
-        logger.info("Creating missing sheet tab", extra={"sheet": self.sheet_name})
+        logger.info(
+            "Creating missing sheet tab",
+            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
+        )
 
         def _execute_create_sheet():
             request = self._get_service().spreadsheets().batchUpdate(
@@ -172,7 +183,10 @@ class GoogleSheetsClient:
         if values and values[0][: len(HEADERS)] == HEADERS:
             return
 
-        logger.info("Updating sheet headers", extra={"sheet": self.sheet_name})
+        logger.info(
+            "Updating sheet headers",
+            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
+        )
 
         def _execute_update_headers():
             request = self._get_service().spreadsheets().values().update(
@@ -189,6 +203,10 @@ class GoogleSheetsClient:
         delay = 1
         for attempt in range(1, self.max_retries + 1):
             try:
+                logger.info(
+                    "Calling Google Sheets API",
+                    extra={"action": action, "attempt": attempt, "spreadsheet_id": self.spreadsheet_id},
+                )
                 return func()
             except (HttpError, Exception) as exc:  # noqa: BLE001
                 is_last_attempt = attempt == self.max_retries
@@ -197,6 +215,10 @@ class GoogleSheetsClient:
                     extra={"action": action, "attempt": attempt, "error": str(exc)},
                 )
                 if is_last_attempt:
+                    logger.error(
+                        "Google Sheets API call exhausted retries",
+                        extra={"action": action, "attempt": attempt, "spreadsheet_id": self.spreadsheet_id},
+                    )
                     raise
                 time.sleep(delay)
                 delay *= 2
