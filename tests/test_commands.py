@@ -51,6 +51,19 @@ def test_log_saves_entry_and_confirms():
     update.message.reply_text.assert_called_with("Logged task: Finish docs #writing\nTags: #writing")
 
 
+def test_log_handles_storage_errors():
+    storage_client = MagicMock()
+    storage_client.append_entry_async = AsyncMock(side_effect=Exception("boom"))
+    update = _make_update("/log Finish docs")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.log_accomplishment(update, context))
+
+    update.message.reply_text.assert_called_with(
+        "Sorry, I couldn't save that right now. Please try again in a moment."
+    )
+
+
 def test_summary_without_storage():
     update = _make_update("/week")
     context = _make_context()
@@ -87,3 +100,34 @@ def test_summary_formats_entries():
     assert summary_text.startswith("Entries from")
     assert "• [Accomplishment] 2024-05-01: Shipped release (#release #infra)" in summary_text
     assert "• [Task] 2024-05-02: Schedule retro" in summary_text
+
+
+def test_summary_handles_storage_failure():
+    storage_client = MagicMock()
+    storage_client.get_entries_by_date_range_async = AsyncMock(side_effect=Exception("oops"))
+    update = _make_update("/week")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.get_week_summary(update, context))
+
+    update.message.reply_text.assert_called_with(
+        "Sorry, I couldn't retrieve entries right now. Please try again later."
+    )
+
+
+def test_format_summary_handles_empty_entries():
+    start_date = commands._start_date_for_range(7)
+    end_date = start_date + commands.timedelta(days=6)
+
+    summary = commands._format_summary([], start_date, end_date)
+
+    assert summary == "No entries found for the last 7 days."
+
+
+def test_handle_message_prompts_for_command_usage():
+    update = _make_update("Just saying hi")
+    context = _make_context()
+
+    asyncio.run(commands.handle_message(update, context))
+
+    update.message.reply_text.assert_called_once()

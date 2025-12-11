@@ -71,6 +71,12 @@ Entries must be clear and scoped.
 - Maintain existing testing frameworks and patterns.
 - Include fixtures, mocks, or test data as needed.
 
+### Local Quality Checks
+- Run unit tests: `pytest`
+- Lint code: `ruff check`
+- Type-check: `mypy`
+- Address all reported issues before opening a PR.
+
 ---
 
 ## 4. Pull Requests
