@@ -14,7 +14,13 @@ class ReminderScheduler:
     def start_weekly(self, day_of_week: str = "fri", run_time: time = time(hour=15)) -> None:
         """Start a weekly job that triggers the provided callback."""
 
-        self.scheduler.add_job(self.send_reminder, "cron", day_of_week=day_of_week, hour=run_time.hour)
+        self.scheduler.add_job(
+            self.send_reminder,
+            "cron",
+            day_of_week=day_of_week,
+            hour=run_time.hour,
+            minute=run_time.minute,
+        )
         self.scheduler.start()
 
     def shutdown(self) -> None:
