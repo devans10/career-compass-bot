@@ -42,6 +42,84 @@ def _build_service_mock(metadata=None, header_row=None, values=None, include_hea
     return service, spreadsheets_resource, values_resource
 
 
+class FakeRequest:
+    def __init__(self, func):
+        self._func = func
+
+    def execute(self):
+        return self._func()
+
+
+class FakeValuesResource:
+    def __init__(self, service):
+        self.service = service
+
+    def get(self, spreadsheetId, range):  # noqa: N802
+        def _execute():
+            if range.endswith("A1:F1"):
+                return {"values": [self.service.header_row]} if self.service.header_row is not None else {}
+            values = list(self.service.values)
+            if self.service.header_row:
+                values = [self.service.header_row] + values
+            return {"values": values}
+
+        return FakeRequest(_execute)
+
+    def update(self, spreadsheetId, range, valueInputOption, body):  # noqa: N802
+        def _execute():
+            self.service.header_row = body.get("values", [None])[0]
+            return {}
+
+        return FakeRequest(_execute)
+
+    def append(self, spreadsheetId, range, valueInputOption, insertDataOption, body):  # noqa: N802
+        def _execute():
+            self.service.values.extend(body.get("values", []))
+            return {}
+
+        return FakeRequest(_execute)
+
+
+class FakeSpreadsheetsResource:
+    def __init__(self, service):
+        self.service = service
+        self.values_resource = FakeValuesResource(service)
+
+    def get(self, spreadsheetId, fields=None):  # noqa: N802
+        def _execute():
+            return {
+                "sheets": [
+                    {"properties": {"title": name}} for name in self.service.sheet_titles
+                ]
+            }
+
+        return FakeRequest(_execute)
+
+    def batchUpdate(self, spreadsheetId, body):  # noqa: N802
+        def _execute():
+            for request in body.get("requests", []):
+                add_sheet = request.get("addSheet")
+                if add_sheet:
+                    self.service.sheet_titles.add(add_sheet["properties"]["title"])
+            return {}
+
+        return FakeRequest(_execute)
+
+    def values(self):
+        return self.values_resource
+
+
+class FakeSheetsService:
+    def __init__(self):
+        self.sheet_titles = set()
+        self.header_row = None
+        self.values = []
+        self.spreadsheets_resource = FakeSpreadsheetsResource(self)
+
+    def spreadsheets(self):
+        return self.spreadsheets_resource
+
+
 def test_ensure_sheet_setup_creates_sheet_and_headers():
     metadata = {"sheets": [{"properties": {"title": "Other"}}]}
     service, spreadsheets_resource, values_resource = _build_service_mock(metadata=metadata, header_row=[])
@@ -112,3 +190,39 @@ def test_get_entries_by_date_range_filters_results():
     values_resource.get.assert_called_once_with(
         spreadsheetId="spreadsheet-id", range="Accomplishments!A:F"
     )
+
+
+def test_google_sheets_client_integration_with_fake_service():
+    service = FakeSheetsService()
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    client.ensure_sheet_setup()
+
+    assert "Accomplishments" in service.sheet_titles
+    assert service.header_row == HEADERS
+
+    client.append_entry(
+        {
+            "timestamp": "2024-05-15T10:00:00Z",
+            "date": "2024-05-15",
+            "type": "task",
+            "text": "Prep slides",
+            "tags": "#planning",
+            "source": "telegram",
+        }
+    )
+    client.append_entry(
+        {
+            "timestamp": "2024-06-01T12:00:00Z",
+            "date": "2024-06-01",
+            "type": "idea",
+            "text": "Pilot",  # Should be filtered in May-only range
+            "tags": "",
+            "source": "telegram",
+        }
+    )
+
+    may_entries = client.get_entries_by_date_range("2024-05-01", "2024-05-31")
+
+    assert len(may_entries) == 1
+    assert may_entries[0]["text"] == "Prep slides"

@@ -196,6 +196,13 @@ Run the entire suite with:
 pytest
 ```
 
+Quality checks are also configured for linting and type safety:
+
+```bash
+ruff check
+mypy
+```
+
 ## 🤝 Contributing
 
 See `CONTRIBUTING.md`
