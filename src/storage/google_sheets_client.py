@@ -211,13 +211,13 @@ class GoogleSheetsClient:
 
     def _load_credentials(self):
         scopes = [SCOPE]
-        if self.service_account_file:
-            return service_account.Credentials.from_service_account_file(
-                self.service_account_file, scopes=scopes
-            )
         if self.service_account_json:
             return service_account.Credentials.from_service_account_info(
                 json.loads(self.service_account_json), scopes=scopes
+            )
+        if self.service_account_file:
+            return service_account.Credentials.from_service_account_file(
+                self.service_account_file, scopes=scopes
             )
 
         credentials, _ = google.auth.default(scopes=scopes)
