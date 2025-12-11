@@ -33,7 +33,7 @@
   - `/week`, `/month` → compute date ranges, fetch from storage, format summaries.
 - Add lightweight input validation (empty messages, oversized payloads) and consistent error replies.
 
-### 3) Storage Agent
+### 3) Storage Agent *(Complete)*
 - Implement Google Sheets client in `src/storage/google_sheets_client.py` with:
   - `append_entry(record)` for single-row writes.
   - `get_entries_by_date_range(start_date, end_date)` for retrieval.
