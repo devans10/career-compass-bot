@@ -14,9 +14,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a welcome message and basic instructions."""
 
     message = (
-        "Welcome to Career Compass Bot!\n"
-        "Use /log to capture accomplishments, /task for follow-ups, /idea for new ideas, "
-        "and /week or /month to review your entries."
+        "Welcome to Career Compass Bot! 🎯\n\n"
+        "I can help you keep a running log of accomplishments, tasks, and ideas. "
+        "Use the commands below to get started, or send /help for more details.\n\n"
+        "• /log <text> — capture an accomplishment\n"
+        "• /task <text> — note a follow-up task\n"
+        "• /idea <text> — jot down a new idea\n"
+        "• /week — see the last 7 days\n"
+        "• /month — see the last 30 days"
     )
     if update.message:
         await update.message.reply_text(message)
@@ -26,12 +31,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Provide a list of available commands."""
 
     help_text = (
-        "Here are some things you can try:\n"
-        "- /log Built a prototype for the new dashboard\n"
-        "- /task Schedule a follow-up with the analytics team\n"
-        "- /idea Explore automating weekly summaries\n"
-        "- /week to see the last 7 days\n"
-        "- /month to see the last 30 days"
+        "Here are some examples to try:\n\n"
+        "• /log Built a prototype for the new dashboard\n"
+        "• /task Schedule a follow-up with the analytics team\n"
+        "• /idea Explore automating weekly summaries\n"
+        "• /week — quick snapshot of the last 7 days\n"
+        "• /month — review the last 30 days\n\n"
+        "Pro tip: add tags like #infra or #ux anywhere in your message to categorize entries."
     )
     if update.message:
         await update.message.reply_text(help_text)

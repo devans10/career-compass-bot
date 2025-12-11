@@ -21,7 +21,7 @@
 
 ## Workstreams and Tasks
 
-### 1) Telegram Interaction Agent
+### 1) Telegram Interaction Agent *(Complete)*
 - Set up bot bootstrap in `src/bot/main.py` with polling and handler registration.
 - Implement user-facing handlers in `src/bot/handlers.py`, including error handling and friendly messages for unknown commands.
 - Add `/start` and `/help` responses with usage examples.
