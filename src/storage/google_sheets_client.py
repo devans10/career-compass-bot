@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -65,6 +66,11 @@ class GoogleSheetsClient:
 
         self._execute_with_retries(_execute_append, action="append_entry")
 
+    async def append_entry_async(self, record: Dict[str, Any]) -> None:
+        """Async wrapper to append a single entry without blocking the event loop."""
+
+        await asyncio.to_thread(self.append_entry, record)
+
     def get_entries_by_date_range(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
         """Retrieve entries between two dates (inclusive)."""
 
@@ -102,10 +108,22 @@ class GoogleSheetsClient:
 
         return entries
 
+    async def get_entries_by_date_range_async(
+        self, start_date: str, end_date: str
+    ) -> List[Dict[str, Any]]:
+        """Async wrapper to fetch entries without blocking the event loop."""
+
+        return await asyncio.to_thread(self.get_entries_by_date_range, start_date, end_date)
+
     def ensure_sheet_setup(self) -> None:
         """Public helper to set up the sheet headers and tab if missing."""
 
         self._ensure_sheet_initialized()
+
+    async def ensure_sheet_setup_async(self) -> None:
+        """Async wrapper for sheet setup without blocking the event loop."""
+
+        await asyncio.to_thread(self.ensure_sheet_setup)
 
     def _ensure_sheet_initialized(self) -> None:
         if self._headers_initialized:
