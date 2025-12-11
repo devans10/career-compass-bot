@@ -10,6 +10,11 @@ from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 from telegram.ext import Application
 
+try:
+    from asyncio import AbstractEventLoop
+except ImportError:  # pragma: no cover - Python <3.10 fallback
+    AbstractEventLoop = asyncio.AbstractEventLoop
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_REMINDER_MESSAGE = "Weekly check-in: what were your top 3 accomplishments this week?"
@@ -45,6 +50,11 @@ class ReminderScheduler:
         self.application = application
         self.chat_id = chat_id
         self.reminder_message = reminder_message
+        try:
+            self.loop: AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         self.scheduler = scheduler or BackgroundScheduler(timezone=tz)
 
     def start_weekly(self, day_of_week: str = "fri", run_time: time = time(hour=15)) -> None:
@@ -68,7 +78,7 @@ class ReminderScheduler:
     def _enqueue_reminder(self) -> None:
         """Push the reminder coroutine into the Telegram application's event loop."""
 
-        self.application.create_task(self._send_reminder())
+        asyncio.run_coroutine_threadsafe(self._send_reminder(), self.loop)
 
     async def _send_reminder(self) -> None:
         """Send the reminder message to the configured chat."""
