@@ -65,7 +65,7 @@ career-compass-bot/
 │  └─ FUTURE_ENHANCEMENTS.md
 │
 ├─ .env.example
-├─ requirements.txt
+├─ Dockerfile
 ├─ README.md
 ├─ CHANGELOG.md
 └─ CONTRIBUTING.md
@@ -89,13 +89,24 @@ git clone https://github.com/<yourusername>/career-compass-bot.git
 cd career-compass-bot
 ```
 ---
-### 2. Install dependencies
+### 2. Set up a virtual environment (recommended)
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+Dependencies are defined in `pyproject.toml`.
+
+```bash
+pip install --upgrade pip
+pip install -e .            # Runtime dependencies
+pip install -e '.[dev]'     # Optional: add linting/tests
 ```
 ---
-### 3. Configure environment variables
+### 4. Configure environment variables
 Copy the example environment file:
 
 ```bash
@@ -117,6 +128,16 @@ Then fill in:
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
 
+### 5. Run the bot locally
+
+The bot loads `.env` automatically for local development.
+
+```bash
+python -m src.bot.main
+```
+
+The bot will begin polling for messages.
+
 ### Logging
 
 Logs are written to standard output for both local CLI runs and containerized deployments.
@@ -125,7 +146,7 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 (INFO by default).
 
 ---
-### 4. Enable Google Sheets API
+### 6. Enable Google Sheets API
 1. Create a Google Cloud project
 2. Enable Google Sheets API
 3. Create a Service Account
@@ -136,12 +157,40 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 <service-account-name>@<project-id>.iam.gserviceaccount.com
 ```
 ---
-### 5. Run the bot
+### 7. Container build & runtime
+
+A lightweight Dockerfile is included for containerized deployments.
+
 ```bash
-python -m src.bot.main
+# Build
+docker build -t career-compass-bot .
+
+# Run with your local .env and service account file
+docker run \
+  --env-file .env \
+  -v $(pwd)/service_account.json:/app/service_account.json:ro \
+  career-compass-bot
 ```
 
-The bot will begin polling for messages.
+The default container command runs `python -m src.bot.main`, which starts Telegram polling
+and the in-process scheduler when `REMINDERS_ENABLED=true`. To use an external cron instead,
+disable the scheduler via `REMINDERS_ENABLED=false` and invoke the image on your schedule with
+the same command.
+
+## 📈 Operations & Monitoring
+
+- **Logs:** All components log to standard output with timezone-aware timestamps. For containers,
+  use `docker logs <container>`; for local runs, monitor the terminal session. Increase verbosity
+  by setting `LOG_LEVEL=DEBUG` temporarily when debugging.
+- **Google Sheets auth/quota issues:** Authentication failures typically surface as 401/403 errors.
+  Ensure the service account email listed in your JSON credentials has edit access to the sheet
+  and that `SERVICE_ACCOUNT_FILE`/`SERVICE_ACCOUNT_JSON` paths are correct. Quota exhaustion will
+  return 429 errors—spread calls out, reduce reminder frequency, or request higher limits in the
+  Google Cloud Console.
+- **Reminder schedule/timezone changes:** Update `REMINDER_DAY_OF_WEEK`, `REMINDER_TIME`, and
+  `TIMEZONE` in your environment (.env or container env vars) and restart the process so the
+  scheduler picks up the new cadence. Setting `REMINDERS_ENABLED=false` skips scheduler startup
+  entirely if you prefer external scheduling.
 
 
 ## 🤖 Commands
