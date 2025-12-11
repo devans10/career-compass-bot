@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -22,12 +23,14 @@ class GoogleSheetsClient:
         self,
         spreadsheet_id: str,
         service_account_file: Optional[str] = None,
+        service_account_json: Optional[str] = None,
         sheet_name: str = "Accomplishments",
         max_retries: int = 3,
         service: Any | None = None,
     ) -> None:
         self.spreadsheet_id = spreadsheet_id
         self.service_account_file = service_account_file
+        self.service_account_json = service_account_json
         self.sheet_name = sheet_name
         self.max_retries = max_retries
         self._service = service
@@ -208,6 +211,10 @@ class GoogleSheetsClient:
 
     def _load_credentials(self):
         scopes = [SCOPE]
+        if self.service_account_json:
+            return service_account.Credentials.from_service_account_info(
+                json.loads(self.service_account_json), scopes=scopes
+            )
         if self.service_account_file:
             return service_account.Credentials.from_service_account_file(
                 self.service_account_file, scopes=scopes

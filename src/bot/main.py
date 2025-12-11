@@ -15,8 +15,12 @@ logger = logging.getLogger(__name__)
 def build_application() -> Application:
     """Create and configure the Telegram application instance."""
 
-    config = load_config()
-    configure_logging(config.log_level)
+    try:
+        config = load_config()
+    except ValueError as exc:
+        logger.critical("Configuration error: %s", exc)
+        raise
+    configure_logging(config.log_level, config.timezone)
 
     application = ApplicationBuilder().token(config.telegram_bot_token).build()
     register_handlers(application)
@@ -24,7 +28,9 @@ def build_application() -> Application:
     if config.spreadsheet_id:
         try:
             storage_client = GoogleSheetsClient(
-                config.spreadsheet_id, service_account_file=config.service_account_file
+                config.spreadsheet_id,
+                service_account_file=config.service_account_file,
+                service_account_json=config.service_account_json,
             )
             storage_client.ensure_sheet_setup()
             application.bot_data["storage_client"] = storage_client

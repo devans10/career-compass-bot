@@ -107,12 +107,13 @@ Then fill in:
 |----------|-------------|
 | TELEGRAM_BOT_TOKEN          | Token provided by BotFather |
 | SPREADSHEET_ID              | ID of your Google Sheet |
-| SERVICE_ACCOUNT_FILE        | Path to your service account JSON file |
+| SERVICE_ACCOUNT_FILE        | Path to your service account JSON file (required if SERVICE_ACCOUNT_JSON is not set) |
+| SERVICE_ACCOUNT_JSON        | Raw JSON string for service account credentials (required if SERVICE_ACCOUNT_FILE is not set) |
 | LOG_LEVEL                   | Logging level (INFO by default) |
-| TIMEZONE                    | Local timezone (e.g., America/New_York) |
+| TIMEZONE                    | IANA timezone for scheduling/logging (e.g., America/New_York or UTC) |
 | REMINDERS_ENABLED           | Set to `false` to disable scheduled reminders |
-| REMINDER_CHAT_ID            | Telegram chat ID to receive reminders |
-| REMINDER_DAY_OF_WEEK        | Day to send reminders (cron-style string, e.g., `fri`) |
+| REMINDER_CHAT_ID            | Telegram chat ID to receive reminders (required if reminders are enabled) |
+| REMINDER_DAY_OF_WEEK        | Day to send reminders (`mon`–`sun`) |
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
 
