@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "career-compass-bot"
+version = "0.1.0"
+description = "A Telegram-based personal career tracking bot for logging accomplishments, tasks, and professional growth insights."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Dave", email = "you@example.com" }
+]
+license = { text = "Proprietary" }
+
+dependencies = [
+    "python-telegram-bot>=21.0",
+    "google-api-python-client>=2.111.0",
+    "google-auth>=2.34.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-auth-httplib2>=0.2.0",
+    "python-dotenv>=1.0.1",
+    "APScheduler>=3.10.4",
+    "pytz>=2024.1",
+]
+
+# Optional: If you want AI rewriting/summarization in Phase 2
+# Uncomment when ready
+# dependencies += [
+#     "openai>=1.0.0"
+# ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.1.0",
+    "ruff>=0.2.1",
+    "mypy>=1.10.0",
+    "types-python-telegram-bot>=0.0.6",  # Optional type stubs
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "B", "I"]
+ignore = ["E203"]  # makes Black + Ruff compatible
+
+[tool.pytest.ini_options]
+addopts = "--maxfail=1 --disable-warnings -q"
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+warn_return_any = true
+ignore_missing_imports = true
+strict = false
