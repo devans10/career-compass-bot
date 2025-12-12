@@ -219,10 +219,15 @@ def _user_context(update: Update) -> Dict[str, object]:
 def _get_storage_client(context: ContextTypes.DEFAULT_TYPE):
     """Retrieve the storage client from the application context."""
 
-    if not hasattr(context, "application"):
-        return None
+    if hasattr(context, "application") and getattr(context.application, "bot_data", None) is not None:
+        storage_client = context.application.bot_data.get("storage_client")
+        if storage_client:
+            return storage_client
 
-    return context.application.bot_data.get("storage_client")
+    if hasattr(context, "bot_data"):
+        return context.bot_data.get("storage_client")
+
+    return None
 
 
 def _start_date_for_range(days: int) -> date:

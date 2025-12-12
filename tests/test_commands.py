@@ -12,6 +12,13 @@ def _make_context(storage_client=None):
     return SimpleNamespace(application=application)
 
 
+def _make_bot_data_only_context(storage_client=None):
+    bot_data = {}
+    if storage_client:
+        bot_data["storage_client"] = storage_client
+    return SimpleNamespace(bot_data=bot_data)
+
+
 def _make_update(text: str):
     message = SimpleNamespace(text=text, reply_text=AsyncMock())
     return SimpleNamespace(message=message)
@@ -73,6 +80,17 @@ def test_summary_without_storage():
     update.message.reply_text.assert_called_once_with(
         "Storage is not configured yet, so I can't fetch entries. Please try again later."
     )
+
+
+def test_log_uses_bot_data_when_application_missing():
+    storage_client = MagicMock()
+    storage_client.append_entry_async = AsyncMock()
+    update = _make_update("/log Finish docs")
+    context = _make_bot_data_only_context(storage_client)
+
+    asyncio.run(commands.log_accomplishment(update, context))
+
+    storage_client.append_entry_async.assert_called_once()
 
 
 def test_summary_formats_entries():
