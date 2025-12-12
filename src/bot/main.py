@@ -23,6 +23,7 @@ def build_application() -> Application:
     configure_logging(config.log_level, config.timezone)
 
     application = ApplicationBuilder().token(config.telegram_bot_token).build()
+    application.bot_data["allowed_user_ids"] = config.telegram_allowed_users
     register_handlers(application)
 
     if config.spreadsheet_id:
