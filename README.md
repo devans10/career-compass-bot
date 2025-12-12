@@ -106,7 +106,18 @@ pip install -e .            # Runtime dependencies
 pip install -e '.[dev]'     # Optional: add linting/tests
 ```
 ---
-### 4. Configure environment variables
+### 4. Create your Telegram bot
+
+Use [BotFather](https://t.me/BotFather) to create and configure your bot:
+
+1. Start a chat with **BotFather** in Telegram.
+2. Run `/newbot` and follow the prompts to set a display name and unique username (must end with `bot`).
+3. Copy the **HTTP API token** BotFather returns — you will paste it into `TELEGRAM_BOT_TOKEN`.
+4. (Optional) Use `/setdescription`, `/setuserpic`, and `/setabouttext` in BotFather to personalize the bot profile.
+
+If you plan to restrict access, capture the Telegram user IDs you want to allow and supply them via `TELEGRAM_ALLOWED_USERS` (comma-separated list).
+---
+### 5. Configure environment variables
 Copy the example environment file:
 
 ```bash
@@ -118,6 +129,7 @@ Then fill in:
 |----------|-------------|
 | TELEGRAM_BOT_TOKEN          | Token provided by BotFather |
 | SPREADSHEET_ID              | ID of your Google Sheet |
+| TELEGRAM_ALLOWED_USERS      | Optional comma-separated list of Telegram user IDs allowed to interact with the bot (e.g., `12345,67890`) |
 | SERVICE_ACCOUNT_FILE        | Path to your service account JSON file (required if SERVICE_ACCOUNT_JSON is not set) |
 | SERVICE_ACCOUNT_JSON        | Raw JSON string for service account credentials (required if SERVICE_ACCOUNT_FILE is not set) |
 | LOG_LEVEL                   | Logging level (INFO by default) |
@@ -128,7 +140,7 @@ Then fill in:
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
 
-### 5. Run the bot locally
+### 6. Run the bot locally
 
 The bot loads `.env` automatically for local development.
 
@@ -146,7 +158,7 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 (INFO by default).
 
 ---
-### 6. Enable Google Sheets API
+### 7. Enable Google Sheets API
 1. Create a Google Cloud project
 2. Enable Google Sheets API
 3. Create a Service Account
@@ -157,7 +169,7 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 <service-account-name>@<project-id>.iam.gserviceaccount.com
 ```
 ---
-### 7. Container build & runtime
+### 8. Container build & runtime
 
 A lightweight Dockerfile is included for containerized deployments.
 

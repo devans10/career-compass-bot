@@ -13,6 +13,7 @@ class Config:
 
     telegram_bot_token: str
     spreadsheet_id: str
+    telegram_allowed_users: tuple[int, ...] = ()
     service_account_file: Optional[str] = None
     service_account_json: Optional[str] = None
     log_level: str = "INFO"
@@ -36,6 +37,7 @@ def load_config() -> Config:
 
     telegram_bot_token = _require("TELEGRAM_BOT_TOKEN")
     spreadsheet_id = _require("SPREADSHEET_ID")
+    telegram_allowed_users = _parse_int_list(os.getenv("TELEGRAM_ALLOWED_USERS"))
     service_account_file = os.getenv("SERVICE_ACCOUNT_FILE")
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if not (service_account_file or service_account_json):
@@ -64,6 +66,7 @@ def load_config() -> Config:
     return Config(
         telegram_bot_token=telegram_bot_token,
         spreadsheet_id=spreadsheet_id,
+        telegram_allowed_users=telegram_allowed_users,
         service_account_file=service_account_file,
         service_account_json=service_account_json,
         log_level=log_level,
@@ -86,6 +89,25 @@ def _parse_int(value: Optional[str]) -> Optional[int]:
         return int(value)
     except ValueError as exc:  # noqa: BLE001
         raise ValueError("REMINDER_CHAT_ID must be an integer") from exc
+
+
+def _parse_int_list(value: Optional[str]) -> tuple[int, ...]:
+    """Parse a comma-separated list of integers into a tuple."""
+
+    if not value:
+        return ()
+
+    values = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            values.append(int(item))
+        except ValueError as exc:  # noqa: BLE001
+            raise ValueError("TELEGRAM_ALLOWED_USERS must contain only integers") from exc
+
+    return tuple(values)
 
 
 def _parse_time(value: str) -> tuple[int, int]:
