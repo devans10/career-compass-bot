@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  bot:
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_OWNER:-devans10}/career-compass-bot:${IMAGE_TAG:-main}
+    pull_policy: always
+    env_file:
+      - .env
+    volumes:
+      - ./service_account.json:/app/service_account.json:ro
+    restart: unless-stopped
