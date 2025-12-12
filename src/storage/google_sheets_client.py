@@ -70,7 +70,29 @@ class GoogleSheetsClient:
             )
             return request.execute()
 
-        self._execute_with_retries(_execute_append, action="append_entry")
+        response = self._execute_with_retries(_execute_append, action="append_entry")
+
+        updates = response.get("updates") if isinstance(response, dict) else None
+        updated_rows = updates.get("updatedRows") if isinstance(updates, dict) else None
+        if not updated_rows:
+            logger.error(
+                "Google Sheets append returned no updates",
+                extra={
+                    "sheet": self.sheet_name,
+                    "spreadsheet_id": self.spreadsheet_id,
+                    "response_keys": sorted(response.keys()) if isinstance(response, dict) else None,
+                },
+            )
+            raise RuntimeError("Google Sheets append did not write any rows")
+
+        logger.info(
+            "Append completed",
+            extra={
+                "sheet": self.sheet_name,
+                "spreadsheet_id": self.spreadsheet_id,
+                "updated_rows": updated_rows,
+            },
+        )
 
     async def append_entry_async(self, record: Dict[str, Any]) -> None:
         """Async wrapper to append a single entry without blocking the event loop."""
@@ -234,13 +256,31 @@ class GoogleSheetsClient:
     def _load_credentials(self):
         scopes = [SCOPE]
         if self.service_account_json:
-            return service_account.Credentials.from_service_account_info(
-                json.loads(self.service_account_json), scopes=scopes
-            )
+            info = self._load_service_account_info(self.service_account_json)
+            return service_account.Credentials.from_service_account_info(info, scopes=scopes)
         if self.service_account_file:
-            return service_account.Credentials.from_service_account_file(
-                self.service_account_file, scopes=scopes
-            )
+            with open(self.service_account_file, "r", encoding="utf-8") as fh:
+                info = json.load(fh)
+            self._validate_service_account_info(info)
+            return service_account.Credentials.from_service_account_info(info, scopes=scopes)
 
         credentials, _ = google.auth.default(scopes=scopes)
         return credentials
+
+    def _load_service_account_info(self, raw_json: str) -> Dict[str, Any]:
+        try:
+            info = json.loads(raw_json)
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
+            raise ValueError("Service account JSON is not valid JSON") from exc
+
+        self._validate_service_account_info(info)
+        return info
+
+    @staticmethod
+    def _validate_service_account_info(info: Dict[str, Any]) -> None:
+        required_fields = ["client_email", "token_uri", "private_key", "project_id"]
+        missing = [field for field in required_fields if not info.get(field)]
+        if missing:
+            raise ValueError(
+                "Service account info missing required fields: " + ", ".join(sorted(missing))
+            )

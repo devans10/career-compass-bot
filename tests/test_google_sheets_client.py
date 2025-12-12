@@ -1,9 +1,14 @@
+import json
 from unittest.mock import MagicMock
+
+import pytest
 
 from src.storage.google_sheets_client import HEADERS, GoogleSheetsClient
 
 
-def _build_service_mock(metadata=None, header_row=None, values=None, include_header=True):
+def _build_service_mock(
+    metadata=None, header_row=None, values=None, include_header=True, append_response=None
+):
     """Helper to build a nested Google Sheets service mock."""
 
     service = MagicMock()
@@ -30,7 +35,8 @@ def _build_service_mock(metadata=None, header_row=None, values=None, include_hea
 
     values_get_request = MagicMock()
     values_get_request.execute.return_value = {"values": values} if values is not None else {}
-    values_resource.append.return_value = MagicMock(execute=MagicMock(return_value={}))
+    append_payload = append_response or {"updates": {"updatedRows": 1}}
+    values_resource.append.return_value = MagicMock(execute=MagicMock(return_value=append_payload))
     if values is not None:
         if include_header:
             values_resource.get.side_effect = [header_get_request, values_get_request]
@@ -75,7 +81,7 @@ class FakeValuesResource:
     def append(self, spreadsheetId, range, valueInputOption, insertDataOption, body):  # noqa: N802
         def _execute():
             self.service.values.extend(body.get("values", []))
-            return {}
+            return {"updates": {"updatedRows": len(body.get("values", []))}}
 
         return FakeRequest(_execute)
 
@@ -140,7 +146,7 @@ def test_ensure_sheet_setup_creates_sheet_and_headers():
 def test_append_entry_writes_row_in_schema_order():
     service, _, values_resource = _build_service_mock(header_row=[HEADERS])
     append_request = MagicMock()
-    append_request.execute.return_value = {}
+    append_request.execute.return_value = {"updates": {"updatedRows": 1}}
     values_resource.append.return_value = append_request
 
     client = GoogleSheetsClient("spreadsheet-id", service=service)
@@ -169,6 +175,26 @@ def test_append_entry_writes_row_in_schema_order():
         },
     )
     append_request.execute.assert_called_once()
+
+
+def test_append_entry_raises_when_no_rows_updated():
+    service, _, _ = _build_service_mock(
+        header_row=[HEADERS], append_response={"updates": {"updatedRows": 0}}
+    )
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+    client._headers_initialized = True
+
+    with pytest.raises(RuntimeError, match="did not write any rows"):
+        client.append_entry(
+            {
+                "timestamp": "",
+                "date": "",
+                "type": "task",
+                "text": "",
+                "tags": "",
+                "source": "telegram",
+            }
+        )
 
 
 def test_get_entries_by_date_range_filters_results():
@@ -226,3 +252,31 @@ def test_google_sheets_client_integration_with_fake_service():
 
     assert len(may_entries) == 1
     assert may_entries[0]["text"] == "Prep slides"
+
+
+def test_load_credentials_validates_service_account_json(monkeypatch):
+    monkeypatch.setattr(
+        "src.storage.google_sheets_client.service_account.Credentials.from_service_account_info",
+        MagicMock(),
+    )
+
+    client = GoogleSheetsClient(
+        "spreadsheet-id", service_account_json=json.dumps({"client_email": "bot@example.com"})
+    )
+
+    with pytest.raises(ValueError, match="Service account info missing required fields"):
+        client._load_credentials()
+
+
+def test_load_credentials_validates_service_account_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "src.storage.google_sheets_client.service_account.Credentials.from_service_account_info",
+        MagicMock(),
+    )
+    service_account_file = tmp_path / "service.json"
+    service_account_file.write_text(json.dumps({"token_uri": "https://example.com"}), encoding="utf-8")
+
+    client = GoogleSheetsClient("spreadsheet-id", service_account_file=str(service_account_file))
+
+    with pytest.raises(ValueError, match="Service account info missing required fields"):
+        client._load_credentials()
