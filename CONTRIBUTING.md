@@ -70,6 +70,8 @@ Entries must be clear and scoped.
 - Prefer small, isolated tests.
 - Maintain existing testing frameworks and patterns.
 - Include fixtures, mocks, or test data as needed.
+- Ensure every change keeps the overall test coverage at **80% or higher**; new submissions must add or update tests to meet
+  this threshold.
 
 ### Local Quality Checks
 - Run unit tests: `pytest`
