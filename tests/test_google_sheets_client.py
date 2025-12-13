@@ -3,7 +3,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.storage.google_sheets_client import HEADERS, GoogleSheetsClient
+from src.storage.google_sheets_client import (
+    COMPETENCY_HEADERS,
+    COMPETENCY_STATUSES,
+    GOAL_HEADERS,
+    GOAL_MAPPING_HEADERS,
+    GOAL_STATUSES,
+    HEADERS,
+    GoogleSheetsClient,
+)
 
 
 def _build_service_mock(
@@ -56,38 +64,73 @@ class FakeRequest:
         return self._func()
 
 
+class FakeSheetsService:
+    def __init__(self):
+        self.sheet_titles: set[str] = set()
+        self.sheet_data: dict[str, dict[str, list]] = {}
+        self.spreadsheets_resource = FakeSpreadsheetsResource(self)
+
+    def spreadsheets(self):
+        return self.spreadsheets_resource
+
+    def ensure_sheet(self, sheet_name: str) -> dict:
+        if sheet_name not in self.sheet_titles:
+            self.sheet_titles.add(sheet_name)
+        if sheet_name not in self.sheet_data:
+            self.sheet_data[sheet_name] = {"header": None, "values": []}
+        return self.sheet_data[sheet_name]
+
+    @property
+    def header_row(self):
+        return self.ensure_sheet("Accomplishments")["header"]
+
+    @header_row.setter
+    def header_row(self, value):
+        self.ensure_sheet("Accomplishments")["header"] = value
+
+    @property
+    def values(self):
+        return self.ensure_sheet("Accomplishments")["values"]
+
+
 class FakeValuesResource:
-    def __init__(self, service):
+    def __init__(self, service: FakeSheetsService):
         self.service = service
 
     def get(self, spreadsheetId, range):  # noqa: N802
         def _execute():
-            if range.endswith("A1:F1"):
-                return {"values": [self.service.header_row]} if self.service.header_row is not None else {}
-            values = list(self.service.values)
-            if self.service.header_row:
-                values = [self.service.header_row] + values
+            sheet_name, cell_range = range.split("!")
+            sheet = self.service.ensure_sheet(sheet_name)
+            if cell_range.startswith("A1"):
+                return {"values": [sheet["header"]]} if sheet["header"] is not None else {}
+            values = list(sheet["values"])
+            if sheet["header"] is not None:
+                values = [sheet["header"]] + values
             return {"values": values}
 
         return FakeRequest(_execute)
 
     def update(self, spreadsheetId, range, valueInputOption, body):  # noqa: N802
         def _execute():
-            self.service.header_row = body.get("values", [None])[0]
+            sheet_name = range.split("!")[0]
+            sheet = self.service.ensure_sheet(sheet_name)
+            sheet["header"] = body.get("values", [None])[0]
             return {}
 
         return FakeRequest(_execute)
 
     def append(self, spreadsheetId, range, valueInputOption, insertDataOption, body):  # noqa: N802
         def _execute():
-            self.service.values.extend(body.get("values", []))
+            sheet_name = range.split("!")[0]
+            sheet = self.service.ensure_sheet(sheet_name)
+            sheet["values"].extend(body.get("values", []))
             return {"updates": {"updatedRows": len(body.get("values", []))}}
 
         return FakeRequest(_execute)
 
 
 class FakeSpreadsheetsResource:
-    def __init__(self, service):
+    def __init__(self, service: FakeSheetsService):
         self.service = service
         self.values_resource = FakeValuesResource(service)
 
@@ -95,7 +138,7 @@ class FakeSpreadsheetsResource:
         def _execute():
             return {
                 "sheets": [
-                    {"properties": {"title": name}} for name in self.service.sheet_titles
+                    {"properties": {"title": name}} for name in sorted(self.service.sheet_titles)
                 ]
             }
 
@@ -106,24 +149,13 @@ class FakeSpreadsheetsResource:
             for request in body.get("requests", []):
                 add_sheet = request.get("addSheet")
                 if add_sheet:
-                    self.service.sheet_titles.add(add_sheet["properties"]["title"])
+                    self.service.ensure_sheet(add_sheet["properties"]["title"])
             return {}
 
         return FakeRequest(_execute)
 
     def values(self):
         return self.values_resource
-
-
-class FakeSheetsService:
-    def __init__(self):
-        self.sheet_titles = set()
-        self.header_row = None
-        self.values = []
-        self.spreadsheets_resource = FakeSpreadsheetsResource(self)
-
-    def spreadsheets(self):
-        return self.spreadsheets_resource
 
 
 def test_ensure_sheet_setup_creates_sheet_and_headers():
@@ -150,7 +182,7 @@ def test_append_entry_writes_row_in_schema_order():
     values_resource.append.return_value = append_request
 
     client = GoogleSheetsClient("spreadsheet-id", service=service)
-    client._headers_initialized = True
+    client._initialized_sheets.add(client.sheet_name)
 
     client.append_entry(
         {
@@ -182,7 +214,7 @@ def test_append_entry_raises_when_no_rows_updated():
         header_row=[HEADERS], append_response={"updates": {"updatedRows": 0}}
     )
     client = GoogleSheetsClient("spreadsheet-id", service=service)
-    client._headers_initialized = True
+    client._initialized_sheets.add(client.sheet_name)
 
     with pytest.raises(RuntimeError, match="did not write any rows"):
         client.append_entry(
@@ -207,13 +239,13 @@ def test_get_entries_by_date_range_filters_results():
         header_row=[HEADERS], values=rows, include_header=False
     )
     client = GoogleSheetsClient("spreadsheet-id", service=service)
-    client._headers_initialized = True
+    client._initialized_sheets.add(client.sheet_name)
 
     entries = client.get_entries_by_date_range("2024-05-15", "2024-06-15")
 
     assert len(entries) == 1
     assert entries[0]["text"] == "Two"
-    values_resource.get.assert_called_once_with(
+    values_resource.get.assert_called_with(
         spreadsheetId="spreadsheet-id", range="Accomplishments!A:F"
     )
 
@@ -252,6 +284,146 @@ def test_google_sheets_client_integration_with_fake_service():
 
     assert len(may_entries) == 1
     assert may_entries[0]["text"] == "Prep slides"
+
+
+def test_goal_sheet_validation_requires_tab_and_correct_rows():
+    client = GoogleSheetsClient("spreadsheet-id", service=FakeSheetsService())
+
+    with pytest.raises(ValueError, match="Sheet 'Goals' is missing"):
+        client.get_goals()
+
+    service = FakeSheetsService()
+    goals_sheet = service.ensure_sheet("Goals")
+    goals_sheet["header"] = GOAL_HEADERS
+    goals_sheet["values"].append(["1", "Ship", "Done", "2024-12-31", "Me", ""])
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with pytest.raises(ValueError, match="Invalid status 'Done'"):
+        client.get_goals()
+
+
+def test_append_goal_mapping_and_read_back():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    client.append_goal_mapping(
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goal_id": "G-123",
+            "competency_id": "C-456",
+            "notes": "Linked",
+        }
+    )
+
+    mappings = client.get_goal_mappings()
+
+    assert len(mappings) == 1
+    assert mappings[0]["goalid"] == "G-123"
+    assert service.ensure_sheet("GoalMappings")["values"][-1][0] == "2024-06-01T12:00:00Z"
+
+
+def test_append_goal_and_competency_validation():
+    service = FakeSheetsService()
+    service.ensure_sheet("Goals")["header"] = GOAL_HEADERS
+    service.ensure_sheet("Competencies")["header"] = COMPETENCY_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with pytest.raises(ValueError, match="Field 'Title' is required"):
+        client.append_goal({"goal_id": "G-1", "status": next(iter(GOAL_STATUSES))})
+
+    with pytest.raises(ValueError, match="Invalid status 'Retired'"):
+        client.append_competency(
+            {
+                "competency_id": "C-1",
+                "name": "Communication",
+                "status": "Retired",
+            }
+        )
+
+
+def test_goal_mapping_requires_goal_or_competency():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with pytest.raises(ValueError, match="requires at least a GoalID or CompetencyID"):
+        client.append_goal_mapping(
+            {"entrytimestamp": "2024-06-01T12:00:00Z", "entrydate": "2024-06-01"}
+        )
+
+
+def test_trimmed_rows_are_padded_for_goal_related_sheets():
+    service = FakeSheetsService()
+    goals_sheet = service.ensure_sheet("Goals")
+    goals_sheet["header"] = GOAL_HEADERS
+    goals_sheet["values"].append(
+        ["G-1", "Ship", "In Progress", "2024-12-31"]  # Missing Owner, Notes
+    )
+
+    competencies_sheet = service.ensure_sheet("Competencies")
+    competencies_sheet["header"] = COMPETENCY_HEADERS
+    competencies_sheet["values"].append(
+        ["C-1", "Communication", "Core", "Active"]  # Missing Description
+    )
+
+    mappings_sheet = service.ensure_sheet("GoalMappings")
+    mappings_sheet["header"] = GOAL_MAPPING_HEADERS
+    mappings_sheet["values"].append(
+        ["2024-06-01T12:00:00Z", "2024-06-01", "G-1"]  # Missing CompetencyID, Notes
+    )
+
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    goals = client.get_goals()
+    competencies = client.get_competencies()
+    mappings = client.get_goal_mappings()
+
+    assert goals == [
+        {
+            "goalid": "G-1",
+            "title": "Ship",
+            "status": "In Progress",
+            "targetdate": "2024-12-31",
+            "owner": "",
+            "notes": "",
+        }
+    ]
+    assert competencies == [
+        {
+            "competencyid": "C-1",
+            "name": "Communication",
+            "category": "Core",
+            "status": "Active",
+            "description": "",
+        }
+    ]
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "",
+            "notes": "",
+        }
+    ]
+
+
+def test_goal_mapping_header_and_date_validation():
+    service = FakeSheetsService()
+    sheet = service.ensure_sheet("GoalMappings")
+    sheet["header"] = ["Wrong"]
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with pytest.raises(ValueError, match="header mismatch"):
+        client.get_goal_mappings()
+
+    sheet["header"] = GOAL_MAPPING_HEADERS
+    sheet["values"].append(["2024-01-01T00:00:00Z", "01-01-2024", "G-1", "", ""])
+
+    with pytest.raises(ValueError, match="must match %Y-%m-%d"):
+        client.get_goal_mappings()
 
 
 def test_load_credentials_validates_service_account_json(monkeypatch):
