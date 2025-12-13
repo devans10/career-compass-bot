@@ -502,9 +502,7 @@ class GoogleSheetsClient:
         row: Sequence[str], headers: Sequence[str], sheet_name: str, row_number: int
     ) -> List[str]:
         if len(row) < len(headers):
-            raise ValueError(
-                f"Row {row_number} in sheet '{sheet_name}' is incomplete; expected {len(headers)} columns."
-            )
+            row = list(row) + [""] * (len(headers) - len(row))
         return list(row[: len(headers)])
 
     def _validate_goal(self, goal: Dict[str, Any]) -> None:

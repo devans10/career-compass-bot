@@ -354,6 +354,62 @@ def test_goal_mapping_requires_goal_or_competency():
         )
 
 
+def test_trimmed_rows_are_padded_for_goal_related_sheets():
+    service = FakeSheetsService()
+    goals_sheet = service.ensure_sheet("Goals")
+    goals_sheet["header"] = GOAL_HEADERS
+    goals_sheet["values"].append(
+        ["G-1", "Ship", "In Progress", "2024-12-31"]  # Missing Owner, Notes
+    )
+
+    competencies_sheet = service.ensure_sheet("Competencies")
+    competencies_sheet["header"] = COMPETENCY_HEADERS
+    competencies_sheet["values"].append(
+        ["C-1", "Communication", "Core", "Active"]  # Missing Description
+    )
+
+    mappings_sheet = service.ensure_sheet("GoalMappings")
+    mappings_sheet["header"] = GOAL_MAPPING_HEADERS
+    mappings_sheet["values"].append(
+        ["2024-06-01T12:00:00Z", "2024-06-01", "G-1"]  # Missing CompetencyID, Notes
+    )
+
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    goals = client.get_goals()
+    competencies = client.get_competencies()
+    mappings = client.get_goal_mappings()
+
+    assert goals == [
+        {
+            "goalid": "G-1",
+            "title": "Ship",
+            "status": "In Progress",
+            "targetdate": "2024-12-31",
+            "owner": "",
+            "notes": "",
+        }
+    ]
+    assert competencies == [
+        {
+            "competencyid": "C-1",
+            "name": "Communication",
+            "category": "Core",
+            "status": "Active",
+            "description": "",
+        }
+    ]
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "",
+            "notes": "",
+        }
+    ]
+
+
 def test_goal_mapping_header_and_date_validation():
     service = FakeSheetsService()
     sheet = service.ensure_sheet("GoalMappings")
