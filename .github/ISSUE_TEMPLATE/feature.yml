@@ -1,0 +1,19 @@
+name: Feature request
+description: New feature or major change
+title: "feat: "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Why is this change needed?
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan
+      description: High-level implementation steps or link to implementation plan
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
