@@ -108,6 +108,8 @@ Centralized configuration:
 - Google Sheets spreadsheet ID.
 - Google Service Account credentials path or JSON.
 - Timezone and scheduling settings.
+- Goal/competency sheet tabs (**Goals**, **Competencies**, **GoalMappings**) with required headers and
+  status vocabularies (goal: Not Started/In Progress/Blocked/Completed/Deferred; competency: Active/Inactive).
 
 Configuration is loaded from environment variables, with defaults where appropriate. A .env.example is provided for local development.
 
@@ -125,8 +127,11 @@ Standardizes logging:
 
 ### 5. Tests (tests/)
 
-- test_parsing.py – unit tests for parsing tags, dates, and entry types.
-- test_commands.py – tests for core command logic, using mocks for the storage layer and Telegram API.
+- test_parsing.py – unit tests for parsing tags, dates, entry types, and goal/competency references.
+- test_commands.py – tests for core command logic, including goal/competency commands and mapping creation.
+- test_google_sheets_client.py – storage-layer validation using fake Google Sheets implementations.
+- test_integration_flows.py – integration-style tests that drive commands against the fake Sheets service
+  to cover goal creation/listing and entry-to-goal mapping end-to-end.
 
 ---
 
@@ -159,6 +164,16 @@ Standardizes logging:
 4. Calls google_sheets_client.get_entries_by_date_range(start_date, end_date).
 5. Formats the results into a summary message and sends it back to the user.
 
+### Goal and Competency Mapping
+
+1. User issues `/goal_add`, `/goal_status`, or `/goal_list` to maintain rows in the **Goals** sheet; `/goal_link`
+   ties the latest entry timestamp to goal/competency IDs in **GoalMappings**.
+2. Logging commands automatically extract `#goal:<id>` and `#comp:<competency>` tags and generate GoalMappings rows
+   alongside the Accomplishments append.
+3. Summaries fetch **Goals**, **Competencies**, and **GoalMappings** to enrich entries with titles/statuses when
+   timestamps match.
+4. Google Sheets client enforces headers and status vocabularies so invalid tabs or values are reported early.
+
 --- 
 
 ### Security and Privacy
@@ -177,15 +192,16 @@ Standardizes logging:
 - Google Sheets storage.
 - Weekly reminders.
 - Basic retrieval (week/month).
+- Goal/competency logging, linking, and summaries backed by dedicated Sheets tabs.
 
 #### Phase 2 (Future)
 
-- Goal and competency definitions stored in a dedicated sheet.
-- Mappings from entries to goals/competencies.
-- Additional commands for goal review and tagging.
+- AI-powered summarization and drafting of self-evaluation sections.
+- Career coaching suggestions based on patterns in entries.
+- Improved onboarding and resilience for additional platforms (e.g., Slack, Teams).
 
 #### Phase 3 (Future)
 
-- AI-powered summarization and drafting of self-evaluation sections.
-- Career coaching suggestions based on patterns in entries.
 - Optional migration to a more robust datastore (e.g., database backend).
+- Long-term retention, analytics, and historical comparisons across review cycles.
+- Extensible plug-ins for new storage or notification channels.

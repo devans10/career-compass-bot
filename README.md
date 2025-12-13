@@ -171,6 +171,11 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 
 Add the Phase 2 tabs (**Goals**, **Competencies**, **GoalMappings**) and headers described in
 [`docs/GOOGLE_SHEETS_MIGRATION.md`](docs/GOOGLE_SHEETS_MIGRATION.md) before using goal/competency features.
+Use these guards to avoid schema validation failures:
+
+- Goal statuses must be one of: Not Started, In Progress, Blocked, Completed, Deferred.
+- Competency statuses must be Active or Inactive.
+- GoalMappings rows link entries to `GoalID`/`CompetencyID` pairs and require ISO dates (`YYYY-MM-DD`).
 ---
 ### 8. Container build & runtime
 
@@ -225,6 +230,22 @@ Examples:
 /task Schedule meeting for timeout review
 /idea Build Logic Apps p95 latency dashboard
 ```
+
+### Goals & Competencies
+
+- /goal_add <id> | <title> [| status=<status> | target=<YYYY-MM-DD> | owner=<name> | notes=<text>]
+  Create or update a goal row in the **Goals** sheet.
+- /goal_list
+  Display all saved goals with status, target date, owner, and notes.
+- /goal_status <id> <status> [notes]
+  Append a status change with optional notes (statuses: Not Started, In Progress, Blocked, Completed, Deferred).
+- /goal_link <goal/competency refs> [notes]
+  Link the latest entry timestamp to a goal and/or competency (e.g., `/goal_link #goal:GOAL-1 #comp:communication`).
+- /goals_summary
+  Summarize goals by status and upcoming target dates.
+
+Add `#goal:<id>` and `#comp:<competency>` tags inside `/log`, `/task`, or `/idea` messages to auto-map entries to the
+**GoalMappings** sheet. Summaries include those links when present.
 ---
 ### Retrieval
 
