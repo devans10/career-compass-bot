@@ -149,3 +149,148 @@ def test_handle_message_prompts_for_command_usage():
     asyncio.run(commands.handle_message(update, context))
 
     update.message.reply_text.assert_called_once()
+
+
+def test_add_goal_requires_id_and_title():
+    update = _make_update("/goal_add")
+    context = _make_context()
+
+    asyncio.run(commands.add_goal(update, context))
+
+    update.message.reply_text.assert_called_once()
+
+
+def test_add_goal_saves_to_storage():
+    storage_client = MagicMock()
+    update = _make_update("/goal_add G-1 Launch platform | status=In Progress")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.add_goal(update, context))
+
+    storage_client.append_goal.assert_called_once()
+    update.message.reply_text.assert_called_once()
+
+
+def test_list_goals_formats_results():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {
+            "goalid": "G-2",
+            "title": "Improve onboarding",
+            "status": "In Progress",
+            "targetdate": "2024-12-31",
+            "owner": "Alex",
+            "notes": "Pilot phase",
+        }
+    ]
+    update = _make_update("/goal_list")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.list_goals(update, context))
+
+    update.message.reply_text.assert_called_once()
+    assert "Improve onboarding" in update.message.reply_text.call_args.args[0]
+
+
+def test_list_goals_handles_missing_storage():
+    update = _make_update("/goal_list")
+    context = _make_context()
+
+    asyncio.run(commands.list_goals(update, context))
+
+    update.message.reply_text.assert_called_once()
+
+
+def test_update_goal_status_handles_missing_goal():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = []
+    update = _make_update("/goal_status G-99 Completed")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.update_goal_status(update, context))
+
+    update.message.reply_text.assert_called_once()
+
+
+def test_update_goal_status_succeeds_and_appends():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {
+            "goalid": "G-1",
+            "title": "Ship onboarding",
+            "status": "Not Started",
+            "targetdate": "",
+            "owner": "",
+            "notes": "",
+        }
+    ]
+    storage_client.append_goal = MagicMock()
+    update = _make_update("/goal_status G-1 Completed Wrapped up")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.update_goal_status(update, context))
+
+    storage_client.append_goal.assert_called_once()
+    update.message.reply_text.assert_called_once()
+
+
+def test_link_goal_requires_reference():
+    update = _make_update("/goal_link")
+    context = _make_context()
+
+    asyncio.run(commands.link_goal(update, context))
+
+    update.message.reply_text.assert_called_once()
+
+
+def test_link_goal_appends_mapping():
+    storage_client = MagicMock()
+    storage_client.append_goal_mapping = MagicMock()
+    update = _make_update("/goal_link #goal:G-1 Connected")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.link_goal(update, context))
+
+    storage_client.append_goal_mapping.assert_called_once()
+    update.message.reply_text.assert_called_once()
+
+
+def test_goals_summary_returns_status_counts():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {
+            "goalid": "G-1",
+            "title": "Ship onboarding",
+            "status": "In Progress",
+            "targetdate": "2024-12-31",
+            "owner": "Alex",
+            "notes": "",
+        },
+        {
+            "goalid": "G-2",
+            "title": "Improve quality",
+            "status": "Completed",
+            "targetdate": "",
+            "owner": "",
+            "notes": "",
+        },
+    ]
+    update = _make_update("/goals_summary")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.goals_summary(update, context))
+
+    summary_text = update.message.reply_text.call_args.args[0]
+    assert "In Progress: 1" in summary_text
+    assert "Completed: 1" in summary_text
+
+
+def test_goals_summary_handles_empty_list():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = []
+    update = _make_update("/goals_summary")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.goals_summary(update, context))
+
+    update.message.reply_text.assert_called_once()

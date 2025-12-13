@@ -18,6 +18,11 @@ def register_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("log", commands.log_accomplishment))
     application.add_handler(CommandHandler("task", commands.log_task))
     application.add_handler(CommandHandler("idea", commands.log_idea))
+    application.add_handler(CommandHandler("goal_add", commands.add_goal))
+    application.add_handler(CommandHandler("goal_list", commands.list_goals))
+    application.add_handler(CommandHandler("goal_status", commands.update_goal_status))
+    application.add_handler(CommandHandler("goal_link", commands.link_goal))
+    application.add_handler(CommandHandler("goals_summary", commands.goals_summary))
     application.add_handler(CommandHandler("week", commands.get_week_summary))
     application.add_handler(CommandHandler("month", commands.get_month_summary))
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from typing import Dict, List
@@ -5,7 +6,15 @@ from typing import Dict, List
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.bot.parsing import extract_command_argument, extract_tags, normalize_entry
+from src.bot.parsing import (
+    extract_command_argument,
+    extract_tags,
+    normalize_entry,
+    parse_goal_add,
+    parse_goal_link,
+    parse_goal_status_change,
+)
+from src.storage.google_sheets_client import GOAL_STATUSES
 
 
 logger = logging.getLogger(__name__)
@@ -27,11 +36,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     message = (
         "Welcome to Career Compass Bot! 🎯\n\n"
-        "I can help you keep a running log of accomplishments, tasks, and ideas. "
+        "I can help you keep a running log of accomplishments, tasks, and ideas, plus track goals. "
         "Use the commands below to get started, or send /help for more details.\n\n"
         "• /log <text> — capture an accomplishment\n"
         "• /task <text> — note a follow-up task\n"
         "• /idea <text> — jot down a new idea\n"
+        "• /goal_add <id> | <title> — add a goal (e.g., status=In Progress)\n"
+        "• /goal_list — review saved goals\n"
         "• /week — see the last 7 days\n"
         "• /month — see the last 30 days"
     )
@@ -52,9 +63,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /log Built a prototype for the new dashboard\n"
         "• /task Schedule a follow-up with the analytics team\n"
         "• /idea Explore automating weekly summaries\n"
+        "• /goal_add GOAL-12 | Ship onboarding revamp | status=In Progress\n"
+        "• /goal_status GOAL-12 Completed Shipped to production\n"
+        "• /goal_link #goal:GOAL-12 #comp:communication Linked to sprint demo\n"
         "• /week — quick snapshot of the last 7 days\n"
         "• /month — review the last 30 days\n\n"
-        "Pro tip: add tags like #infra or #ux anywhere in your message to categorize entries."
+        "Pro tip: add tags like #infra, goal references like #goal:Q3-Launch, "
+        "or competency tags like #comp:communication anywhere in your message."
     )
     if update.message:
         await update.message.reply_text(help_text)
@@ -93,6 +108,231 @@ async def get_month_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     logger.info("Handling /month command", extra=_user_context(update))
     await _send_summary(update, context, days=30)
+
+
+async def add_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Add a goal record to storage."""
+
+    if not update.message:
+        return
+
+    logger.info("Handling /goal_add command", extra=_user_context(update))
+    message_text = extract_command_argument(update.message.text or "")
+
+    try:
+        goal_fields = parse_goal_add(message_text, GOAL_STATUSES)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    if not goal_fields.get("goalid") or not goal_fields.get("title"):
+        await update.message.reply_text(
+            "Please provide a goal ID and title. Example: /goal_add GOAL-1 | Improve onboarding | status=Not Started"
+        )
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text(
+            "Storage is not configured yet, so I couldn't save that goal. Please try again later."
+        )
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal, goal_fields)
+    except Exception:
+        logger.exception("Failed to append goal", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that goal. Please try again in a moment.")
+        return
+
+    await update.message.reply_text(
+        f"Saved goal {goal_fields['goalid']} with status {goal_fields['status']}: {goal_fields['title']}"
+    )
+
+
+async def list_goals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all saved goals."""
+
+    if not update.message:
+        return
+
+    logger.info("Handling /goal_list command", extra=_user_context(update))
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't fetch goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to fetch goals", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't retrieve goals right now. Please try again later.")
+        return
+
+    if not goals:
+        await update.message.reply_text("No goals found yet. Add one with /goal_add <id> | <title> | status=Not Started")
+        return
+
+    lines = ["Goals:"]
+    for goal in goals:
+        target = f" (target {goal['targetdate']})" if goal.get("targetdate") else ""
+        owner = f" — owner: {goal['owner']}" if goal.get("owner") else ""
+        notes = f" — notes: {goal['notes']}" if goal.get("notes") else ""
+        lines.append(
+            f"• {goal['goalid']}: {goal['title']} [{goal['status']}{target}{owner}{notes}]"
+        )
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def update_goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Update the status of an existing goal."""
+
+    if not update.message:
+        return
+
+    logger.info("Handling /goal_status command", extra=_user_context(update))
+    message_text = extract_command_argument(update.message.text or "")
+    try:
+        parsed = parse_goal_status_change(message_text, GOAL_STATUSES)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    goal_id = parsed.get("goalid")
+    status = parsed.get("status")
+    if not goal_id or not status:
+        await update.message.reply_text(
+            "Please provide a goal and valid status. Example: /goal_status GOAL-1 In Progress Drafting plan"
+        )
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't update goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to fetch goals for status update", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't load goals to update. Please try again later.")
+        return
+
+    existing = next((goal for goal in goals if goal.get("goalid") == goal_id), None)
+    if not existing:
+        await update.message.reply_text("I couldn't find that goal. Use /goal_list to review IDs.")
+        return
+
+    updated = {
+        "goalid": goal_id,
+        "title": existing.get("title", ""),
+        "status": status,
+        "targetdate": existing.get("targetdate", ""),
+        "owner": existing.get("owner", ""),
+        "notes": parsed.get("notes") or existing.get("notes", ""),
+    }
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal, updated)
+    except Exception:
+        logger.exception("Failed to append goal status update", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record that update. Please try again later.")
+        return
+
+    await update.message.reply_text(
+        f"Updated {goal_id} to '{status}'. Notes: {parsed.get('notes') or 'n/a'}"
+    )
+
+
+async def link_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Link a goal (and optional competency) to the latest work entry timestamp."""
+
+    if not update.message:
+        return
+
+    logger.info("Handling /goal_link command", extra=_user_context(update))
+    message_text = extract_command_argument(update.message.text or "")
+    parsed = parse_goal_link(message_text)
+
+    if not parsed.get("goalid") and not parsed.get("competencyid"):
+        await update.message.reply_text(
+            "Please include a goal or competency reference. Example: /goal_link #goal:GOAL-1 #comp:communication Linked to sprint demo"
+        )
+        return
+
+    now = datetime.utcnow()
+    mapping = {
+        "entrytimestamp": now.isoformat(),
+        "entrydate": now.date().isoformat(),
+        "goalid": parsed.get("goalid", ""),
+        "competencyid": parsed.get("competencyid", ""),
+        "notes": parsed.get("notes", ""),
+    }
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't link that goal.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal_mapping, mapping)
+    except Exception:
+        logger.exception("Failed to append goal mapping", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record that link. Please try again later.")
+        return
+
+    goal_text = parsed.get("goalid") or "(no goal id)"
+    comp_text = f" and competency {parsed['competencyid']}" if parsed.get("competencyid") else ""
+    await update.message.reply_text(
+        f"Linked goal {goal_text}{comp_text}. Notes: {parsed.get('notes') or 'n/a'}"
+    )
+
+
+async def goals_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Summarize goals by status and target dates."""
+
+    if not update.message:
+        return
+
+    logger.info("Handling /goals_summary command", extra=_user_context(update))
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't summarize goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to fetch goals for summary", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't retrieve goals right now. Please try again later.")
+        return
+
+    if not goals:
+        await update.message.reply_text("No goals to summarize yet. Add one with /goal_add <id> | <title>.")
+        return
+
+    status_counts: Dict[str, int] = {status: 0 for status in GOAL_STATUSES}
+    for goal in goals:
+        status_counts[goal.get("status", "Not Started")] = status_counts.get(goal.get("status", ""), 0) + 1
+
+    lines = ["Goals summary:", "", "By status:"]
+    for status in sorted(status_counts):
+        lines.append(f"• {status}: {status_counts.get(status, 0)}")
+
+    upcoming = [goal for goal in goals if goal.get("targetdate")]
+    if upcoming:
+        upcoming.sort(key=lambda g: g.get("targetdate"))
+        lines.append("")
+        lines.append("Target dates:")
+        for goal in upcoming:
+            owner_text = f" (owner: {goal['owner']})" if goal.get("owner") else ""
+            lines.append(
+                f"• {goal['targetdate']}: {goal['goalid']} — {goal['title']} [{goal['status']}]"
+                f"{owner_text}"
+            )
+
+    await update.message.reply_text("\n".join(lines))
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
