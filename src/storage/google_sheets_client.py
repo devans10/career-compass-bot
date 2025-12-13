@@ -1,6 +1,9 @@
 import asyncio
 import json
 import logging
+import asyncio
+import json
+import logging
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
@@ -17,13 +20,43 @@ SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 HEADERS = ["Timestamp", "Date", "Type", "Text", "Tags", "Source"]
 ACCOMPLISHMENTS_HEADERS = HEADERS
 
-GOAL_HEADERS = ["GoalID", "Title", "Status", "TargetDate", "Owner", "Notes"]
+GOAL_HEADERS = [
+    "GoalID",
+    "Title",
+    "Status",
+    "TargetDate",
+    "Owner",
+    "Notes",
+    "LifecycleStatus",
+    "SupersededBy",
+    "LastModified",
+    "Archived",
+    "History",
+]
 GOAL_STATUSES = {"Not Started", "In Progress", "Blocked", "Completed", "Deferred"}
+GOAL_LIFECYCLE_STATUSES = {"Active", "Archived", "Superseded", "Updated"}
 
 COMPETENCY_HEADERS = ["CompetencyID", "Name", "Category", "Status", "Description"]
 COMPETENCY_STATUSES = {"Active", "Inactive"}
 
 GOAL_MAPPING_HEADERS = ["EntryTimestamp", "EntryDate", "GoalID", "CompetencyID", "Notes"]
+
+GOAL_MILESTONE_HEADERS = [
+    "GoalID",
+    "Milestone",
+    "TargetDate",
+    "Status",
+    "CompletionDate",
+    "Notes",
+]
+GOAL_MILESTONE_STATUSES = {"Not Started", "In Progress", "Blocked", "Completed", "Deferred"}
+
+GOAL_REVIEW_HEADERS = ["GoalID", "ReviewType", "Notes", "Rating", "ReviewedOn"]
+GOAL_EVALUATION_HEADERS = ["GoalID", "EvaluationType", "Notes", "Rating", "EvaluatedOn"]
+COMPETENCY_EVALUATION_HEADERS = ["CompetencyID", "Notes", "Rating", "EvaluatedOn"]
+
+REMINDER_SETTINGS_HEADERS = ["Category", "TargetID", "Frequency", "Enabled", "Channel", "Notes"]
+
 DATE_FORMAT = "%Y-%m-%d"
 
 
@@ -83,6 +116,11 @@ class GoogleSheetsClient:
                 goal.get("targetdate") or goal.get("target_date", ""),
                 goal.get("owner", ""),
                 goal.get("notes", ""),
+                goal.get("lifecyclestatus") or goal.get("lifecycle_status", "Active"),
+                goal.get("supersededby") or goal.get("superseded_by", ""),
+                goal.get("lastmodified") or goal.get("last_modified", datetime.utcnow().isoformat()),
+                str(goal.get("archived", "")).strip(),
+                goal.get("history", ""),
             ],
             action="append_goal",
             create_if_missing=False,
@@ -146,6 +184,42 @@ class GoogleSheetsClient:
         )
         return [self._normalize_goal_row(row, index) for index, row in enumerate(rows, start=2)]
 
+    def append_goal_milestone(self, milestone: Dict[str, Any]) -> None:
+        """Append a milestone row for a goal."""
+
+        self._validate_goal_milestone(milestone)
+        self._append_row(
+            sheet_name="GoalMilestones",
+            headers=GOAL_MILESTONE_HEADERS,
+            values=[
+                milestone.get("goalid") or milestone.get("goal_id") or milestone.get("goal", ""),
+                milestone.get("milestone", ""),
+                milestone.get("targetdate") or milestone.get("target_date", ""),
+                milestone.get("status", ""),
+                milestone.get("completiondate")
+                or milestone.get("completion_date")
+                or milestone.get("completedon", ""),
+                milestone.get("notes", ""),
+            ],
+            action="append_goal_milestone",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def get_goal_milestones(self) -> List[Dict[str, str]]:
+        """Return all goal milestone rows with validation."""
+
+        rows = self._get_sheet_rows(
+            sheet_name="GoalMilestones",
+            headers=GOAL_MILESTONE_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_goal_milestone_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
     def get_competencies(self) -> List[Dict[str, str]]:
         """Return all competency records with validation."""
 
@@ -157,6 +231,141 @@ class GoogleSheetsClient:
         )
         return [
             self._normalize_competency_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
+    def append_goal_review(self, review: Dict[str, Any]) -> None:
+        """Append a goal review row (e.g., midyear)."""
+
+        self._validate_goal_review(review)
+        self._append_row(
+            sheet_name="GoalReviews",
+            headers=GOAL_REVIEW_HEADERS,
+            values=[
+                review.get("goalid") or review.get("goal_id") or review.get("goal", ""),
+                review.get("reviewtype") or review.get("review_type", ""),
+                review.get("notes", ""),
+                review.get("rating", ""),
+                review.get("reviewedon")
+                or review.get("reviewed_on")
+                or review.get("date")
+                or datetime.utcnow().date().isoformat(),
+            ],
+            action="append_goal_review",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def get_goal_reviews(self) -> List[Dict[str, str]]:
+        rows = self._get_sheet_rows(
+            sheet_name="GoalReviews",
+            headers=GOAL_REVIEW_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [self._normalize_goal_review_row(row, index) for index, row in enumerate(rows, start=2)]
+
+    def append_goal_evaluation(self, evaluation: Dict[str, Any]) -> None:
+        """Append a year-end goal evaluation."""
+
+        self._validate_goal_evaluation(evaluation)
+        self._append_row(
+            sheet_name="GoalEvaluations",
+            headers=GOAL_EVALUATION_HEADERS,
+            values=[
+                evaluation.get("goalid")
+                or evaluation.get("goal_id")
+                or evaluation.get("goal", ""),
+                evaluation.get("evaluationtype")
+                or evaluation.get("evaluation_type")
+                or evaluation.get("type", ""),
+                evaluation.get("notes", ""),
+                evaluation.get("rating", ""),
+                evaluation.get("evaluatedon")
+                or evaluation.get("evaluated_on")
+                or evaluation.get("date")
+                or datetime.utcnow().date().isoformat(),
+            ],
+            action="append_goal_evaluation",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def append_competency_evaluation(self, evaluation: Dict[str, Any]) -> None:
+        """Append a competency evaluation row."""
+
+        self._validate_competency_evaluation(evaluation)
+        self._append_row(
+            sheet_name="CompetencyEvaluations",
+            headers=COMPETENCY_EVALUATION_HEADERS,
+            values=[
+                evaluation.get("competencyid")
+                or evaluation.get("competency_id")
+                or evaluation.get("competency", ""),
+                evaluation.get("notes", ""),
+                evaluation.get("rating", ""),
+                evaluation.get("evaluatedon")
+                or evaluation.get("evaluated_on")
+                or evaluation.get("date")
+                or datetime.utcnow().date().isoformat(),
+            ],
+            action="append_competency_evaluation",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def get_goal_evaluations(self) -> List[Dict[str, str]]:
+        rows = self._get_sheet_rows(
+            sheet_name="GoalEvaluations",
+            headers=GOAL_EVALUATION_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_goal_evaluation_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
+    def get_competency_evaluations(self) -> List[Dict[str, str]]:
+        rows = self._get_sheet_rows(
+            sheet_name="CompetencyEvaluations",
+            headers=COMPETENCY_EVALUATION_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_competency_evaluation_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
+    def append_reminder_setting(self, setting: Dict[str, Any]) -> None:
+        """Persist reminder settings for milestones and reviews."""
+
+        self._append_row(
+            sheet_name="ReminderSettings",
+            headers=REMINDER_SETTINGS_HEADERS,
+            values=[
+                setting.get("category", ""),
+                setting.get("targetid") or setting.get("target_id") or setting.get("target", ""),
+                setting.get("frequency", ""),
+                str(setting.get("enabled", True)),
+                setting.get("channel", ""),
+                setting.get("notes", ""),
+            ],
+            action="append_reminder_setting",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def get_reminder_settings(self) -> List[Dict[str, str]]:
+        rows = self._get_sheet_rows(
+            sheet_name="ReminderSettings",
+            headers=REMINDER_SETTINGS_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_reminder_setting_row(row, index)
             for index, row in enumerate(rows, start=2)
         ]
 
@@ -446,6 +655,11 @@ class GoogleSheetsClient:
         normalized = self._normalize_row_length(row, GOAL_HEADERS, "Goals", row_number)
         record = dict(zip([header.lower() for header in GOAL_HEADERS], normalized))
         self._validate_status(record["status"], GOAL_STATUSES, "Goals", row_number)
+        lifecycle_value = record.get("lifecyclestatus", "") or "Active"
+        self._validate_status(
+            lifecycle_value, GOAL_LIFECYCLE_STATUSES, "Goals", row_number
+        )
+        record["lifecyclestatus"] = lifecycle_value
         self._validate_date_field(
             record.get("targetdate", ""),
             field_name="TargetDate",
@@ -453,8 +667,51 @@ class GoogleSheetsClient:
             row_number=row_number,
             allow_empty=True,
         )
+        if record.get("lastmodified"):
+            self._validate_date_field(
+                record.get("lastmodified", "").split("T")[0],
+                field_name="LastModified",
+                sheet_name="Goals",
+                row_number=row_number,
+                allow_empty=True,
+            )
         self._validate_non_empty(record.get("goalid", ""), "GoalID", "Goals", row_number)
         self._validate_non_empty(record.get("title", ""), "Title", "Goals", row_number)
+        return record
+
+    def _normalize_goal_milestone_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, GOAL_MILESTONE_HEADERS, "GoalMilestones", row_number
+        )
+        record = dict(zip([header.lower() for header in GOAL_MILESTONE_HEADERS], normalized))
+        self._validate_non_empty(
+            record.get("goalid", ""), "GoalID", "GoalMilestones", row_number
+        )
+        self._validate_non_empty(
+            record.get("milestone", ""), "Milestone", "GoalMilestones", row_number
+        )
+        self._validate_status(
+            record.get("status", ""),
+            GOAL_MILESTONE_STATUSES,
+            "GoalMilestones",
+            row_number,
+        )
+        self._validate_date_field(
+            record.get("targetdate", ""),
+            field_name="TargetDate",
+            sheet_name="GoalMilestones",
+            row_number=row_number,
+            allow_empty=True,
+        )
+        self._validate_date_field(
+            record.get("completiondate", ""),
+            field_name="CompletionDate",
+            sheet_name="GoalMilestones",
+            row_number=row_number,
+            allow_empty=True,
+        )
         return record
 
     def _normalize_competency_row(
@@ -471,6 +728,85 @@ class GoogleSheetsClient:
             record.get("competencyid", ""), "CompetencyID", "Competencies", row_number
         )
         self._validate_non_empty(record.get("name", ""), "Name", "Competencies", row_number)
+        return record
+
+    def _normalize_goal_review_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, GOAL_REVIEW_HEADERS, "GoalReviews", row_number
+        )
+        record = dict(zip([header.lower() for header in GOAL_REVIEW_HEADERS], normalized))
+        self._validate_non_empty(record.get("goalid", ""), "GoalID", "GoalReviews", row_number)
+        self._validate_non_empty(
+            record.get("reviewtype", ""), "ReviewType", "GoalReviews", row_number
+        )
+        self._validate_date_field(
+            record.get("reviewedon", ""),
+            field_name="ReviewedOn",
+            sheet_name="GoalReviews",
+            row_number=row_number,
+            allow_empty=False,
+        )
+        return record
+
+    def _normalize_goal_evaluation_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, GOAL_EVALUATION_HEADERS, "GoalEvaluations", row_number
+        )
+        record = dict(zip([header.lower() for header in GOAL_EVALUATION_HEADERS], normalized))
+        self._validate_non_empty(
+            record.get("goalid", ""), "GoalID", "GoalEvaluations", row_number
+        )
+        self._validate_non_empty(
+            record.get("evaluationtype", ""),
+            "EvaluationType",
+            "GoalEvaluations",
+            row_number,
+        )
+        self._validate_date_field(
+            record.get("evaluatedon", ""),
+            field_name="EvaluatedOn",
+            sheet_name="GoalEvaluations",
+            row_number=row_number,
+            allow_empty=False,
+        )
+        return record
+
+    def _normalize_competency_evaluation_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, COMPETENCY_EVALUATION_HEADERS, "CompetencyEvaluations", row_number
+        )
+        record = dict(zip([header.lower() for header in COMPETENCY_EVALUATION_HEADERS], normalized))
+        self._validate_non_empty(
+            record.get("competencyid", ""),
+            "CompetencyID",
+            "CompetencyEvaluations",
+            row_number,
+        )
+        self._validate_date_field(
+            record.get("evaluatedon", ""),
+            field_name="EvaluatedOn",
+            sheet_name="CompetencyEvaluations",
+            row_number=row_number,
+            allow_empty=False,
+        )
+        return record
+
+    def _normalize_reminder_setting_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, REMINDER_SETTINGS_HEADERS, "ReminderSettings", row_number
+        )
+        record = dict(zip([header.lower() for header in REMINDER_SETTINGS_HEADERS], normalized))
+        self._validate_non_empty(
+            record.get("category", ""), "Category", "ReminderSettings", row_number
+        )
         return record
 
     def _normalize_goal_mapping_row(
@@ -508,6 +844,8 @@ class GoogleSheetsClient:
     def _validate_goal(self, goal: Dict[str, Any]) -> None:
         status = goal.get("status", "")
         self._validate_status(status, GOAL_STATUSES, "Goals", row_number=0)
+        lifecycle = goal.get("lifecyclestatus") or goal.get("lifecycle_status", "Active")
+        self._validate_status(lifecycle, GOAL_LIFECYCLE_STATUSES, "Goals", row_number=0)
         self._validate_date_field(
             goal.get("targetdate") or goal.get("target_date", ""),
             field_name="TargetDate",
@@ -522,6 +860,104 @@ class GoogleSheetsClient:
             row_number=0,
         )
         self._validate_non_empty(goal.get("title", ""), "Title", "Goals", row_number=0)
+
+    def _validate_goal_milestone(self, milestone: Dict[str, Any]) -> None:
+        self._validate_non_empty(
+            milestone.get("goalid") or milestone.get("goal_id") or milestone.get("goal", ""),
+            "GoalID",
+            "GoalMilestones",
+            row_number=0,
+        )
+        self._validate_non_empty(milestone.get("milestone", ""), "Milestone", "GoalMilestones", 0)
+        self._validate_status(
+            milestone.get("status", ""), GOAL_MILESTONE_STATUSES, "GoalMilestones", row_number=0
+        )
+        self._validate_date_field(
+            milestone.get("targetdate") or milestone.get("target_date", ""),
+            field_name="TargetDate",
+            sheet_name="GoalMilestones",
+            row_number=0,
+            allow_empty=True,
+        )
+        self._validate_date_field(
+            milestone.get("completiondate")
+            or milestone.get("completion_date")
+            or milestone.get("completedon", ""),
+            field_name="CompletionDate",
+            sheet_name="GoalMilestones",
+            row_number=0,
+            allow_empty=True,
+        )
+
+    def _validate_goal_review(self, review: Dict[str, Any]) -> None:
+        self._validate_non_empty(
+            review.get("goalid") or review.get("goal_id") or review.get("goal", ""),
+            "GoalID",
+            "GoalReviews",
+            row_number=0,
+        )
+        self._validate_non_empty(
+            review.get("reviewtype") or review.get("review_type", ""),
+            "ReviewType",
+            "GoalReviews",
+            row_number=0,
+        )
+        self._validate_date_field(
+            review.get("reviewedon")
+            or review.get("reviewed_on")
+            or review.get("date")
+            or datetime.utcnow().date().isoformat(),
+            field_name="ReviewedOn",
+            sheet_name="GoalReviews",
+            row_number=0,
+            allow_empty=False,
+        )
+
+    def _validate_goal_evaluation(self, evaluation: Dict[str, Any]) -> None:
+        self._validate_non_empty(
+            evaluation.get("goalid") or evaluation.get("goal_id") or evaluation.get("goal", ""),
+            "GoalID",
+            "GoalEvaluations",
+            row_number=0,
+        )
+        self._validate_non_empty(
+            evaluation.get("evaluationtype")
+            or evaluation.get("evaluation_type")
+            or evaluation.get("type", ""),
+            "EvaluationType",
+            "GoalEvaluations",
+            row_number=0,
+        )
+        self._validate_date_field(
+            evaluation.get("evaluatedon")
+            or evaluation.get("evaluated_on")
+            or evaluation.get("date")
+            or datetime.utcnow().date().isoformat(),
+            field_name="EvaluatedOn",
+            sheet_name="GoalEvaluations",
+            row_number=0,
+            allow_empty=False,
+        )
+
+    def _validate_competency_evaluation(self, evaluation: Dict[str, Any]) -> None:
+        self._validate_non_empty(
+            evaluation.get("competencyid")
+            or evaluation.get("competency_id")
+            or evaluation.get("competency", ""),
+            "CompetencyID",
+            "CompetencyEvaluations",
+            row_number=0,
+        )
+        self._validate_date_field(
+            evaluation.get("evaluatedon")
+            or evaluation.get("evaluated_on")
+            or evaluation.get("date")
+            or datetime.utcnow().date().isoformat(),
+            field_name="EvaluatedOn",
+            sheet_name="CompetencyEvaluations",
+            row_number=0,
+            allow_empty=False,
+        )
 
     def _validate_competency(self, competency: Dict[str, Any]) -> None:
         status = competency.get("status", "")

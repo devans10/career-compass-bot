@@ -1,5 +1,7 @@
 import logging
 
+import logging
+
 from telegram.ext import Application, ApplicationBuilder
 
 from src.bot.handlers import register_handlers
