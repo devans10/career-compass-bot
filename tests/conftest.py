@@ -25,6 +25,7 @@ def _executable_lines(file_path: Path) -> set[int]:
         for lineno in executable
         if 0 <= lineno - 1 < len(source_lines)
         and PRAGMA_NOCOVER not in source_lines[lineno - 1]
+        and "pragma: no cover" not in source_lines[lineno - 1].casefold()
     }
 
 
