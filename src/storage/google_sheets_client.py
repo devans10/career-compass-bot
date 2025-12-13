@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Sequence
 
 import google.auth
 from google.oauth2 import service_account
@@ -14,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 HEADERS = ["Timestamp", "Date", "Type", "Text", "Tags", "Source"]
+ACCOMPLISHMENTS_HEADERS = HEADERS
+
+GOAL_HEADERS = ["GoalID", "Title", "Status", "TargetDate", "Owner", "Notes"]
+GOAL_STATUSES = {"Not Started", "In Progress", "Blocked", "Completed", "Deferred"}
+
+COMPETENCY_HEADERS = ["CompetencyID", "Name", "Category", "Status", "Description"]
+COMPETENCY_STATUSES = {"Active", "Inactive"}
+
+GOAL_MAPPING_HEADERS = ["EntryTimestamp", "EntryDate", "GoalID", "CompetencyID", "Notes"]
+DATE_FORMAT = "%Y-%m-%d"
 
 
 class GoogleSheetsClient:
@@ -34,64 +45,23 @@ class GoogleSheetsClient:
         self.sheet_name = sheet_name
         self.max_retries = max_retries
         self._service = service
-        self._headers_initialized = False
+        self._initialized_sheets: set[str] = set()
 
     def append_entry(self, record: Dict[str, Any]) -> None:
         """Append a single entry to the sheet following the enforced schema."""
 
-        self._ensure_sheet_initialized()
-
-        values = [
-            record.get("timestamp", ""),
-            record.get("date", ""),
-            record.get("type", ""),
-            record.get("text", ""),
-            record.get("tags", ""),
-            record.get("source", ""),
-        ]
-
-        logger.info(
-            "Appending entry to Google Sheet",
-            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
-        )
-
-        def _execute_append():
-            request = (
-                self._get_service()
-                .spreadsheets()
-                .values()
-                .append(
-                    spreadsheetId=self.spreadsheet_id,
-                    range=f"{self.sheet_name}!A:F",
-                    valueInputOption="RAW",
-                    insertDataOption="INSERT_ROWS",
-                    body={"values": [values]},
-                )
-            )
-            return request.execute()
-
-        response = self._execute_with_retries(_execute_append, action="append_entry")
-
-        updates = response.get("updates") if isinstance(response, dict) else None
-        updated_rows = updates.get("updatedRows") if isinstance(updates, dict) else None
-        if not updated_rows:
-            logger.error(
-                "Google Sheets append returned no updates",
-                extra={
-                    "sheet": self.sheet_name,
-                    "spreadsheet_id": self.spreadsheet_id,
-                    "response_keys": sorted(response.keys()) if isinstance(response, dict) else None,
-                },
-            )
-            raise RuntimeError("Google Sheets append did not write any rows")
-
-        logger.info(
-            "Append completed",
-            extra={
-                "sheet": self.sheet_name,
-                "spreadsheet_id": self.spreadsheet_id,
-                "updated_rows": updated_rows,
-            },
+        self._append_row(
+            sheet_name=self.sheet_name,
+            headers=ACCOMPLISHMENTS_HEADERS,
+            values=[
+                record.get("timestamp", ""),
+                record.get("date", ""),
+                record.get("type", ""),
+                record.get("text", ""),
+                record.get("tags", ""),
+                record.get("source", ""),
+            ],
+            action="append_entry",
         )
 
     async def append_entry_async(self, record: Dict[str, Any]) -> None:
@@ -99,10 +69,120 @@ class GoogleSheetsClient:
 
         await asyncio.to_thread(self.append_entry, record)
 
+    def append_goal(self, goal: Dict[str, Any]) -> None:
+        """Append a goal record after validating required fields and status."""
+
+        self._validate_goal(goal)
+        self._append_row(
+            sheet_name="Goals",
+            headers=GOAL_HEADERS,
+            values=[
+                goal.get("goalid") or goal.get("goal_id") or goal.get("id", ""),
+                goal.get("title", ""),
+                goal.get("status", ""),
+                goal.get("targetdate") or goal.get("target_date", ""),
+                goal.get("owner", ""),
+                goal.get("notes", ""),
+            ],
+            action="append_goal",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def append_competency(self, competency: Dict[str, Any]) -> None:
+        """Append a competency record with validation."""
+
+        self._validate_competency(competency)
+        self._append_row(
+            sheet_name="Competencies",
+            headers=COMPETENCY_HEADERS,
+            values=[
+                competency.get("competencyid")
+                or competency.get("competency_id")
+                or competency.get("id", ""),
+                competency.get("name", ""),
+                competency.get("category", ""),
+                competency.get("status", ""),
+                competency.get("description", ""),
+            ],
+            action="append_competency",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def append_goal_mapping(self, mapping: Dict[str, Any]) -> None:
+        """Append a mapping that links an entry to a goal and/or competency."""
+
+        self._validate_goal_mapping(mapping)
+        self._append_row(
+            sheet_name="GoalMappings",
+            headers=GOAL_MAPPING_HEADERS,
+            values=[
+                mapping.get("entrytimestamp")
+                or mapping.get("entry_timestamp")
+                or mapping.get("timestamp", ""),
+                mapping.get("entrydate")
+                or mapping.get("entry_date")
+                or mapping.get("date", ""),
+                mapping.get("goalid") or mapping.get("goal_id") or mapping.get("goal", ""),
+                mapping.get("competencyid")
+                or mapping.get("competency_id")
+                or mapping.get("competency", ""),
+                mapping.get("notes", ""),
+            ],
+            action="append_goal_mapping",
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+
+    def get_goals(self) -> List[Dict[str, str]]:
+        """Return all goal records with validation applied to each row."""
+
+        rows = self._get_sheet_rows(
+            sheet_name="Goals",
+            headers=GOAL_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [self._normalize_goal_row(row, index) for index, row in enumerate(rows, start=2)]
+
+    def get_competencies(self) -> List[Dict[str, str]]:
+        """Return all competency records with validation."""
+
+        rows = self._get_sheet_rows(
+            sheet_name="Competencies",
+            headers=COMPETENCY_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_competency_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
+    def get_goal_mappings(self) -> List[Dict[str, str]]:
+        """Return all goal-to-entry mapping rows with validation."""
+
+        rows = self._get_sheet_rows(
+            sheet_name="GoalMappings",
+            headers=GOAL_MAPPING_HEADERS,
+            create_if_missing=False,
+            allow_header_update=False,
+        )
+        return [
+            self._normalize_goal_mapping_row(row, index)
+            for index, row in enumerate(rows, start=2)
+        ]
+
     def get_entries_by_date_range(self, start_date: str, end_date: str) -> List[Dict[str, Any]]:
         """Retrieve entries between two dates (inclusive)."""
 
-        self._ensure_sheet_initialized()
+        self._ensure_sheet_initialized_for(
+            sheet_name=self.sheet_name,
+            headers=ACCOMPLISHMENTS_HEADERS,
+            create_if_missing=True,
+            allow_header_update=True,
+        )
 
         logger.info(
             "Fetching entries from Google Sheet",
@@ -151,22 +231,145 @@ class GoogleSheetsClient:
     def ensure_sheet_setup(self) -> None:
         """Public helper to set up the sheet headers and tab if missing."""
 
-        self._ensure_sheet_initialized()
+        self._ensure_sheet_initialized_for(
+            sheet_name=self.sheet_name,
+            headers=ACCOMPLISHMENTS_HEADERS,
+            create_if_missing=True,
+            allow_header_update=True,
+        )
 
     async def ensure_sheet_setup_async(self) -> None:
         """Async wrapper for sheet setup without blocking the event loop."""
 
         await asyncio.to_thread(self.ensure_sheet_setup)
 
-    def _ensure_sheet_initialized(self) -> None:
-        if self._headers_initialized:
+    def _append_row(
+        self,
+        sheet_name: str,
+        headers: Sequence[str],
+        values: Sequence[Any],
+        action: str,
+        *,
+        create_if_missing: bool = True,
+        allow_header_update: bool = True,
+    ) -> None:
+        self._ensure_sheet_initialized_for(
+            sheet_name=sheet_name,
+            headers=headers,
+            create_if_missing=create_if_missing,
+            allow_header_update=allow_header_update,
+        )
+
+        normalized_values = list(values)[: len(headers)]
+        if len(normalized_values) < len(headers):
+            normalized_values.extend([""] * (len(headers) - len(normalized_values)))
+
+        logger.info(
+            "Appending row to Google Sheet",
+            extra={"sheet": sheet_name, "spreadsheet_id": self.spreadsheet_id},
+        )
+
+        range_ref = self._build_range(sheet_name, len(headers))
+
+        def _execute_append():
+            request = (
+                self._get_service()
+                .spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=self.spreadsheet_id,
+                    range=range_ref,
+                    valueInputOption="RAW",
+                    insertDataOption="INSERT_ROWS",
+                    body={"values": [normalized_values]},
+                )
+            )
+            return request.execute()
+
+        response = self._execute_with_retries(_execute_append, action=action)
+
+        updates = response.get("updates") if isinstance(response, dict) else None
+        updated_rows = updates.get("updatedRows") if isinstance(updates, dict) else None
+        if not updated_rows:
+            logger.error(
+                "Google Sheets append returned no updates",
+                extra={
+                    "sheet": sheet_name,
+                    "spreadsheet_id": self.spreadsheet_id,
+                    "response_keys": sorted(response.keys()) if isinstance(response, dict) else None,
+                },
+            )
+            raise RuntimeError("Google Sheets append did not write any rows")
+
+        logger.info(
+            "Append completed",
+            extra={
+                "sheet": sheet_name,
+                "spreadsheet_id": self.spreadsheet_id,
+                "updated_rows": updated_rows,
+            },
+        )
+
+    def _get_sheet_rows(
+        self,
+        *,
+        sheet_name: str,
+        headers: Sequence[str],
+        create_if_missing: bool,
+        allow_header_update: bool,
+    ) -> List[List[str]]:
+        self._ensure_sheet_initialized_for(
+            sheet_name=sheet_name,
+            headers=headers,
+            create_if_missing=create_if_missing,
+            allow_header_update=allow_header_update,
+        )
+
+        range_ref = self._build_range(sheet_name, len(headers))
+
+        def _execute_get():
+            request = (
+                self._get_service()
+                .spreadsheets()
+                .values()
+                .get(spreadsheetId=self.spreadsheet_id, range=range_ref)
+            )
+            return request.execute()
+
+        response = self._execute_with_retries(_execute_get, action="get_rows")
+        values = response.get("values", [])
+        if not values:
+            return []
+
+        header_row = values[0][: len(headers)]
+        if header_row != list(headers):
+            raise ValueError(
+                f"Sheet '{sheet_name}' header mismatch. Expected {list(headers)}, found {header_row or 'empty'}"
+            )
+
+        return values[1:]
+
+    def _ensure_sheet_initialized_for(
+        self,
+        *,
+        sheet_name: str,
+        headers: Sequence[str],
+        create_if_missing: bool,
+        allow_header_update: bool,
+    ) -> None:
+        if sheet_name in self._initialized_sheets:
             return
 
-        self._ensure_sheet_exists()
-        self._ensure_headers()
-        self._headers_initialized = True
+        self._ensure_sheet_exists(sheet_name=sheet_name, create_if_missing=create_if_missing)
+        self._ensure_headers(
+            sheet_name=sheet_name,
+            headers=headers,
+            allow_header_update=allow_header_update,
+            _create_if_missing=create_if_missing,
+        )
+        self._initialized_sheets.add(sheet_name)
 
-    def _ensure_sheet_exists(self) -> None:
+    def _ensure_sheet_exists(self, *, sheet_name: str, create_if_missing: bool) -> None:
         def _execute_get_metadata():
             request = self._get_service().spreadsheets().get(
                 spreadsheetId=self.spreadsheet_id, fields="sheets.properties.title"
@@ -176,50 +379,236 @@ class GoogleSheetsClient:
         metadata = self._execute_with_retries(_execute_get_metadata, action="get_metadata")
         sheet_titles = {sheet["properties"]["title"] for sheet in metadata.get("sheets", [])}
 
-        if self.sheet_name in sheet_titles:
+        if sheet_name in sheet_titles:
             return
+        if not create_if_missing:
+            raise ValueError(
+                f"Sheet '{sheet_name}' is missing. Please create it with the expected headers."
+            )
 
         logger.info(
             "Creating missing sheet tab",
-            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
+            extra={"sheet": sheet_name, "spreadsheet_id": self.spreadsheet_id},
         )
 
         def _execute_create_sheet():
             request = self._get_service().spreadsheets().batchUpdate(
                 spreadsheetId=self.spreadsheet_id,
-                body={"requests": [{"addSheet": {"properties": {"title": self.sheet_name}}}]},
+                body={"requests": [{"addSheet": {"properties": {"title": sheet_name}}}]},
             )
             return request.execute()
 
         self._execute_with_retries(_execute_create_sheet, action="create_sheet")
 
-    def _ensure_headers(self) -> None:
+    def _ensure_headers(
+        self,
+        *,
+        sheet_name: str,
+        headers: Sequence[str],
+        allow_header_update: bool,
+        _create_if_missing: bool,
+    ) -> None:
+        header_range = self._build_header_range(sheet_name, len(headers))
+
         def _execute_get_headers():
             request = self._get_service().spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id, range=f"{self.sheet_name}!A1:F1"
+                spreadsheetId=self.spreadsheet_id, range=header_range
             )
             return request.execute()
 
         response = self._execute_with_retries(_execute_get_headers, action="get_headers")
         values = response.get("values", [])
-        if values and values[0][: len(HEADERS)] == HEADERS:
+        if values and values[0][: len(headers)] == list(headers):
             return
+
+        if not allow_header_update:
+            raise ValueError(
+                f"Sheet '{sheet_name}' header mismatch. Expected {list(headers)}, found {values[0] if values else 'empty'}"
+            )
 
         logger.info(
             "Updating sheet headers",
-            extra={"sheet": self.sheet_name, "spreadsheet_id": self.spreadsheet_id},
+            extra={"sheet": sheet_name, "spreadsheet_id": self.spreadsheet_id},
         )
 
         def _execute_update_headers():
             request = self._get_service().spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{self.sheet_name}!A1:F1",
+                range=header_range,
                 valueInputOption="RAW",
-                body={"values": [HEADERS]},
+                body={"values": [list(headers)]},
             )
             return request.execute()
 
         self._execute_with_retries(_execute_update_headers, action="update_headers")
+
+    def _normalize_goal_row(self, row: Sequence[str], row_number: int) -> Dict[str, str]:
+        normalized = self._normalize_row_length(row, GOAL_HEADERS, "Goals", row_number)
+        record = dict(zip([header.lower() for header in GOAL_HEADERS], normalized))
+        self._validate_status(record["status"], GOAL_STATUSES, "Goals", row_number)
+        self._validate_date_field(
+            record.get("targetdate", ""),
+            field_name="TargetDate",
+            sheet_name="Goals",
+            row_number=row_number,
+            allow_empty=True,
+        )
+        self._validate_non_empty(record.get("goalid", ""), "GoalID", "Goals", row_number)
+        self._validate_non_empty(record.get("title", ""), "Title", "Goals", row_number)
+        return record
+
+    def _normalize_competency_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, COMPETENCY_HEADERS, "Competencies", row_number
+        )
+        record = dict(zip([header.lower() for header in COMPETENCY_HEADERS], normalized))
+        self._validate_status(
+            record["status"], COMPETENCY_STATUSES, "Competencies", row_number
+        )
+        self._validate_non_empty(
+            record.get("competencyid", ""), "CompetencyID", "Competencies", row_number
+        )
+        self._validate_non_empty(record.get("name", ""), "Name", "Competencies", row_number)
+        return record
+
+    def _normalize_goal_mapping_row(
+        self, row: Sequence[str], row_number: int
+    ) -> Dict[str, str]:
+        normalized = self._normalize_row_length(
+            row, GOAL_MAPPING_HEADERS, "GoalMappings", row_number
+        )
+        record = dict(zip([header.lower() for header in GOAL_MAPPING_HEADERS], normalized))
+        self._validate_non_empty(
+            record.get("entrytimestamp", ""), "EntryTimestamp", "GoalMappings", row_number
+        )
+        self._validate_date_field(
+            record.get("entrydate", ""),
+            field_name="EntryDate",
+            sheet_name="GoalMappings",
+            row_number=row_number,
+            allow_empty=False,
+        )
+        if not record.get("goalid") and not record.get("competencyid"):
+            raise ValueError(
+                "GoalMappings row requires at least a GoalID or CompetencyID "
+                f"(sheet 'GoalMappings', row {row_number})"
+            )
+        return record
+
+    @staticmethod
+    def _normalize_row_length(
+        row: Sequence[str], headers: Sequence[str], sheet_name: str, row_number: int
+    ) -> List[str]:
+        if len(row) < len(headers):
+            raise ValueError(
+                f"Row {row_number} in sheet '{sheet_name}' is incomplete; expected {len(headers)} columns."
+            )
+        return list(row[: len(headers)])
+
+    def _validate_goal(self, goal: Dict[str, Any]) -> None:
+        status = goal.get("status", "")
+        self._validate_status(status, GOAL_STATUSES, "Goals", row_number=0)
+        self._validate_date_field(
+            goal.get("targetdate") or goal.get("target_date", ""),
+            field_name="TargetDate",
+            sheet_name="Goals",
+            row_number=0,
+            allow_empty=True,
+        )
+        self._validate_non_empty(
+            goal.get("goalid") or goal.get("goal_id") or goal.get("id", ""),
+            "GoalID",
+            "Goals",
+            row_number=0,
+        )
+        self._validate_non_empty(goal.get("title", ""), "Title", "Goals", row_number=0)
+
+    def _validate_competency(self, competency: Dict[str, Any]) -> None:
+        status = competency.get("status", "")
+        self._validate_status(status, COMPETENCY_STATUSES, "Competencies", row_number=0)
+        self._validate_non_empty(
+            competency.get("competencyid")
+            or competency.get("competency_id")
+            or competency.get("id", ""),
+            "CompetencyID",
+            "Competencies",
+            row_number=0,
+        )
+        self._validate_non_empty(competency.get("name", ""), "Name", "Competencies", 0)
+
+    def _validate_goal_mapping(self, mapping: Dict[str, Any]) -> None:
+        entry_date = mapping.get("entrydate") or mapping.get("entry_date") or mapping.get("date", "")
+        entry_timestamp = (
+            mapping.get("entrytimestamp")
+            or mapping.get("entry_timestamp")
+            or mapping.get("timestamp", "")
+        )
+        self._validate_non_empty(entry_timestamp, "EntryTimestamp", "GoalMappings", 0)
+        self._validate_date_field(
+            entry_date,
+            field_name="EntryDate",
+            sheet_name="GoalMappings",
+            row_number=0,
+            allow_empty=False,
+        )
+        goal_id = mapping.get("goalid") or mapping.get("goal_id") or mapping.get("goal", "")
+        competency_id = (
+            mapping.get("competencyid")
+            or mapping.get("competency_id")
+            or mapping.get("competency", "")
+        )
+        if not goal_id and not competency_id:
+            raise ValueError(
+                "GoalMappings append requires at least a GoalID or CompetencyID"
+            )
+
+    @staticmethod
+    def _validate_status(value: str, allowed: set[str], sheet_name: str, row_number: int) -> None:
+        if value not in allowed:
+            raise ValueError(
+                f"Invalid status '{value}' in sheet '{sheet_name}' at row {row_number}. "
+                f"Allowed: {sorted(allowed)}"
+            )
+
+    @staticmethod
+    def _validate_non_empty(value: str, field_name: str, sheet_name: str, row_number: int) -> None:
+        if not value:
+            raise ValueError(
+                f"Field '{field_name}' is required in sheet '{sheet_name}' at row {row_number}"
+            )
+
+    @staticmethod
+    def _validate_date_field(
+        value: str, *, field_name: str, sheet_name: str, row_number: int, allow_empty: bool
+    ) -> None:
+        if not value and allow_empty:
+            return
+        try:
+            datetime.strptime(value, DATE_FORMAT)
+        except ValueError as exc:
+            raise ValueError(
+                f"Field '{field_name}' must match {DATE_FORMAT} in sheet '{sheet_name}' at row {row_number}"
+            ) from exc
+
+    def _build_range(self, sheet_name: str, column_count: int) -> str:
+        return f"{sheet_name}!A:{self._column_letter(column_count)}"
+
+    def _build_header_range(self, sheet_name: str, column_count: int) -> str:
+        column_letter = self._column_letter(column_count)
+        return f"{sheet_name}!A1:{column_letter}1"
+
+    @staticmethod
+    def _column_letter(column_count: int) -> str:
+        # Supports up to column ZZ which exceeds our current schema needs
+        dividend = column_count
+        column_name = ""
+        while dividend > 0:
+            modulo = (dividend - 1) % 26
+            column_name = chr(65 + modulo) + column_name
+            dividend = (dividend - modulo) // 26
+        return column_name
 
     def _execute_with_retries(self, func, action: str):
         delay = 1

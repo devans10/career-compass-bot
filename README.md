@@ -168,6 +168,9 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 ```php-template
 <service-account-name>@<project-id>.iam.gserviceaccount.com
 ```
+
+Add the Phase 2 tabs (**Goals**, **Competencies**, **GoalMappings**) and headers described in
+[`docs/GOOGLE_SHEETS_MIGRATION.md`](docs/GOOGLE_SHEETS_MIGRATION.md) before using goal/competency features.
 ---
 ### 8. Container build & runtime
 
