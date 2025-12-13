@@ -9,7 +9,7 @@ description = "A Telegram-based personal career tracking bot for logging accompl
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-    { name = "Dave", email = "you@example.com" }
+    { name = "Dave Evans", email = "devans@fastmail.com" }
 ]
 license = { text = "Proprietary" }
 

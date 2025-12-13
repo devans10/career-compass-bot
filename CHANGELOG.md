@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## V0.1.0 - 12-13-2025
 
 ### Added
 - Scaffolded the Telegram bot structure with command handlers, scheduler placeholder, and Google Sheets client skeleton. (#1)
