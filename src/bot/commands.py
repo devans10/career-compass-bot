@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 from datetime import date, datetime, timedelta
 from typing import Dict, List
@@ -451,6 +452,8 @@ async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days
         entries = await storage_client.get_entries_by_date_range_async(
             start_date.isoformat(), end_date.isoformat()
         )
+        goal_context = await _fetch_goal_metadata(storage_client, start_date, end_date)
+        entries = _attach_goal_metadata(entries, goal_context)
     except Exception:
         logger.exception("Failed to fetch summary from storage", extra=_user_context(update))
         await update.message.reply_text(
@@ -511,6 +514,126 @@ def _format_summary(entries: List[Dict[str, str]], start_date: date, end_date: d
         text = entry.get("text", "").strip()
         tags = entry.get("tags", "")
         tag_suffix = f" ({tags})" if tags else ""
-        lines.append(f"• [{entry_type}] {entry_date}: {text}{tag_suffix}")
+        metadata_chunks: List[str] = []
+
+        if entry.get("goals"):
+            goals_text = "; ".join(_format_goal_metadata(goal) for goal in entry["goals"])
+            metadata_chunks.append(f"Goals: {goals_text}")
+
+        if entry.get("competencies"):
+            comps_text = "; ".join(
+                _format_competency_metadata(comp) for comp in entry["competencies"]
+            )
+            metadata_chunks.append(f"Competencies: {comps_text}")
+
+        metadata_suffix = f" — {'; '.join(metadata_chunks)}" if metadata_chunks else ""
+        lines.append(f"• [{entry_type}] {entry_date}: {text}{tag_suffix}{metadata_suffix}")
 
     return "\n".join(lines)
+
+
+async def _fetch_goal_metadata(
+    storage_client: object, start_date: date, end_date: date
+) -> Dict[str, List[Dict[str, str]]]:
+    """Load goals, competencies, and mappings, skipping failures gracefully."""
+
+    async def _load_optional(method_name: str) -> List[Dict[str, str]]:
+        getter = getattr(storage_client, method_name, None)
+        if not callable(getter):
+            return []
+
+        try:
+            if inspect.iscoroutinefunction(getter):
+                return await getter()
+            return await asyncio.to_thread(getter)
+        except Exception:
+            logger.exception("Failed to fetch %s", method_name)
+            return []
+
+    goals, competencies, mappings = await asyncio.gather(
+        _load_optional("get_goals"),
+        _load_optional("get_competencies"),
+        _load_optional("get_goal_mappings"),
+    )
+
+    filtered_mappings = [
+        mapping
+        for mapping in mappings
+        if start_date.isoformat()
+        <= mapping.get("entrydate", "")
+        <= end_date.isoformat()
+    ]
+
+    return {
+        "goals": goals,
+        "competencies": competencies,
+        "mappings": filtered_mappings,
+    }
+
+
+def _attach_goal_metadata(
+    entries: List[Dict[str, str]], goal_context: Dict[str, List[Dict[str, str]]]
+) -> List[Dict[str, object]]:
+    """Attach goal and competency details to entries based on stored mappings."""
+
+    goals_by_id = {goal.get("goalid", ""): goal for goal in goal_context.get("goals", [])}
+    competencies_by_id = {
+        comp.get("competencyid", ""): comp for comp in goal_context.get("competencies", [])
+    }
+    mappings_by_timestamp: Dict[str, List[Dict[str, str]]] = {}
+
+    for mapping in goal_context.get("mappings", []):
+        ts = mapping.get("entrytimestamp", "")
+        if not ts:
+            continue
+        mappings_by_timestamp.setdefault(ts, []).append(mapping)
+
+    enriched_entries: List[Dict[str, object]] = []
+    for entry in entries:
+        entry_mappings = mappings_by_timestamp.get(entry.get("timestamp", ""), [])
+        entry_goals = []
+        entry_competencies = []
+
+        for mapping in entry_mappings:
+            goal_id = mapping.get("goalid", "")
+            if goal_id:
+                entry_goals.append(goals_by_id.get(goal_id, {"goalid": goal_id}))
+
+            competency_id = mapping.get("competencyid", "")
+            if competency_id:
+                entry_competencies.append(
+                    competencies_by_id.get(competency_id, {"competencyid": competency_id})
+                )
+
+        enriched_entries.append(
+            {
+                **entry,
+                "goals": entry_goals,
+                "competencies": entry_competencies,
+            }
+        )
+
+    return enriched_entries
+
+
+def _format_goal_metadata(goal: Dict[str, str]) -> str:
+    """Return a readable label for a goal reference."""
+
+    goal_id = goal.get("goalid", "")
+    title = goal.get("title") or ""
+    status = goal.get("status") or ""
+    details = f" — {title}" if title else ""
+    status_suffix = f" ({status})" if status else ""
+    return f"{goal_id}{details}{status_suffix}".strip()
+
+
+def _format_competency_metadata(competency: Dict[str, str]) -> str:
+    """Return a readable label for a competency reference."""
+
+    comp_id = competency.get("competencyid", "")
+    name = competency.get("name") or comp_id
+    status = competency.get("status") or ""
+    category = competency.get("category") or ""
+    status_suffix = f" ({status})" if status else ""
+    category_suffix = f" — {category}" if category else ""
+    return f"{name}{category_suffix}{status_suffix}".strip()

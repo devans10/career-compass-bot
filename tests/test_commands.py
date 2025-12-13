@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -134,6 +135,57 @@ def test_summary_formats_entries():
     assert summary_text.startswith("Entries from")
     assert "• [Accomplishment] 2024-05-01: Shipped release (#release #infra)" in summary_text
     assert "• [Task] 2024-05-02: Schedule retro" in summary_text
+
+
+def test_summary_includes_goal_and_competency_links():
+    entry_date = date.today().isoformat()
+    timestamp = f"{entry_date}T00:00:00Z"
+    storage_client = MagicMock()
+    storage_client.get_entries_by_date_range_async = AsyncMock(return_value=[
+        {
+            "timestamp": timestamp,
+            "date": entry_date,
+            "type": "accomplishment",
+            "text": "Shipped release",
+            "tags": "#release",
+        }
+    ])
+    storage_client.get_goal_mappings.return_value = [
+        {
+            "entrytimestamp": timestamp,
+            "entrydate": entry_date,
+            "goalid": "G-1",
+            "competencyid": "C-1",
+            "notes": "",
+        }
+    ]
+    storage_client.get_goals.return_value = [
+        {
+            "goalid": "G-1",
+            "title": "Ship onboarding",
+            "status": "In Progress",
+            "targetdate": "",
+            "owner": "",
+            "notes": "",
+        }
+    ]
+    storage_client.get_competencies.return_value = [
+        {
+            "competencyid": "C-1",
+            "name": "Communication",
+            "category": "Core",
+            "status": "Active",
+            "description": "",
+        }
+    ]
+    update = _make_update("/week")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.get_week_summary(update, context))
+
+    summary_text = update.message.reply_text.call_args.args[0]
+    assert "Goals: G-1 — Ship onboarding (In Progress)" in summary_text
+    assert "Competencies: Communication — Core (Active)" in summary_text
 
 
 def test_summary_handles_storage_failure():
