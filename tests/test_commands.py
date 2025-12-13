@@ -239,6 +239,17 @@ def test_add_goal_saves_to_storage():
     update.message.reply_text.assert_called_once()
 
 
+def test_add_goal_rejects_invalid_status():
+    storage_client = MagicMock()
+    update = _make_update("/goal_add G-2 Title | status=Done")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.add_goal(update, context))
+
+    storage_client.append_goal.assert_not_called()
+    assert "Status 'Done'" in update.message.reply_text.call_args.args[0]
+
+
 def test_list_goals_formats_results():
     storage_client = MagicMock()
     storage_client.get_goals.return_value = [
@@ -302,6 +313,27 @@ def test_update_goal_status_succeeds_and_appends():
     update.message.reply_text.assert_called_once()
 
 
+def test_update_goal_status_rejects_invalid_status():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {
+            "goalid": "G-1",
+            "title": "Ship onboarding",
+            "status": "Not Started",
+            "targetdate": "",
+            "owner": "",
+            "notes": "",
+        }
+    ]
+    update = _make_update("/goal_status G-1 Done")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.update_goal_status(update, context))
+
+    storage_client.append_goal.assert_not_called()
+    assert "Allowed" in update.message.reply_text.call_args.args[0]
+
+
 def test_link_goal_requires_reference():
     update = _make_update("/goal_link")
     context = _make_context()
@@ -321,6 +353,20 @@ def test_link_goal_appends_mapping():
 
     storage_client.append_goal_mapping.assert_called_once()
     update.message.reply_text.assert_called_once()
+
+
+def test_link_goal_accepts_competency_only():
+    storage_client = MagicMock()
+    storage_client.append_goal_mapping = MagicMock()
+    update = _make_update("/goal_link #comp:communication")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.link_goal(update, context))
+
+    args = storage_client.append_goal_mapping.call_args.args[0]
+    assert args["competencyid"] == "communication"
+    assert args["goalid"] == ""
+    assert "competency communication" in update.message.reply_text.call_args.args[0]
 
 
 def test_goals_summary_returns_status_counts():

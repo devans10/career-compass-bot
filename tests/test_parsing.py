@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import pytest
+
 from src.bot import parsing
 from src.storage.google_sheets_client import GOAL_STATUSES
 
@@ -110,6 +112,21 @@ def test_parse_goal_add_preserves_goal_prefix():
     assert parsed["goalid"] == "GOAL-12"
 
 
+def test_parse_goal_add_defaults_and_key_value_title():
+    command_text = "goal-2 | title=Finalize roadmap"
+
+    parsed = parsing.parse_goal_add(command_text, GOAL_STATUSES)
+
+    assert parsed == {
+        "goalid": "goal-2",
+        "title": "Finalize roadmap",
+        "status": "Not Started",
+        "targetdate": "",
+        "owner": "",
+        "notes": "",
+    }
+
+
 def test_parse_goal_status_change_extracts_notes():
     command_text = "#goal:G-7 Completed Released to customers"
 
@@ -120,6 +137,11 @@ def test_parse_goal_status_change_extracts_notes():
         "status": "Completed",
         "notes": "Released to customers",
     }
+
+
+def test_parse_goal_status_change_validates_status():
+    with pytest.raises(ValueError):
+        parsing.parse_goal_status_change("G-7 Done", GOAL_STATUSES)
 
 
 def test_parse_goal_link_supports_prefixes_and_notes():
@@ -142,6 +164,12 @@ def test_extract_goal_and_competency_refs_dedupes_and_normalizes():
     assert refs == {"goal_ids": ["GOAL-22"], "competency_ids": ["leadership"]}
 
 
+def test_extract_goal_ids_normalizes_and_orders():
+    text = "goal-1 kickoff #goal:goal-1 goal:ROADMAP"
+
+    assert parsing.extract_goal_ids(text) == ["GOAL-1", "ROADMAP"]
+
+
 def test_build_goal_competency_mappings_pairs_goal_and_competency():
     mappings = parsing.build_goal_competency_mappings(
         "2024-06-01T12:00:00", "2024-06-01", ["GOAL-1"], ["communication", "craft"]
@@ -162,4 +190,23 @@ def test_build_goal_competency_mappings_pairs_goal_and_competency():
             "competencyid": "craft",
             "notes": "",
         },
+    ]
+
+
+def test_build_goal_competency_mappings_handles_competency_only():
+    mappings = parsing.build_goal_competency_mappings(
+        "2024-06-02T12:00:00",
+        "2024-06-02",
+        [],
+        ["communication"],
+    )
+
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-02T12:00:00",
+            "entrydate": "2024-06-02",
+            "goalid": "",
+            "competencyid": "communication",
+            "notes": "",
+        }
     ]
