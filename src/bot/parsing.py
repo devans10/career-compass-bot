@@ -2,7 +2,9 @@ import re
 from datetime import datetime
 from typing import Dict, List
 
-GOAL_ID_PATTERN = re.compile(r"(?:#?goal[:\-]?)([A-Za-z0-9_-]+)", re.IGNORECASE)
+GOAL_ID_PATTERN = re.compile(
+    r"(?:#?goal[:\-]?)([A-Za-z0-9_-]+)|(goal-[A-Za-z0-9_-]+)", re.IGNORECASE
+)
 COMPETENCY_TAG_PATTERN = re.compile(r"(?:#?(?:comp|competency)[:\-]?)([A-Za-z0-9_-]+)", re.IGNORECASE)
 STATUS_SPLIT_PATTERN = re.compile(r"\s+")
 
@@ -18,7 +20,11 @@ def extract_tags(text: str) -> List[str]:
 def extract_goal_ids(text: str) -> List[str]:
     """Return a list of goal identifiers referenced in the text."""
 
-    return [match.group(1) for match in GOAL_ID_PATTERN.finditer(text or "")]
+    goal_ids = []
+    for match in GOAL_ID_PATTERN.finditer(text or ""):
+        goal_ids.append(_goal_match_to_id(match))
+
+    return goal_ids
 
 
 def extract_competency_tags(text: str) -> List[str]:
@@ -152,7 +158,22 @@ def normalize_entry(
 
 def _parse_goal_token(token: str) -> str:
     match = GOAL_ID_PATTERN.search(token)
-    return match.group(1) if match else token
+    return _goal_match_to_id(match) if match else token
+
+
+def _goal_match_to_id(match: re.Match) -> str:
+    """Normalize a GOAL_ID_PATTERN match to a consistent identifier."""
+
+    full_match = match.group(0)
+    captured = match.group(1) or match.group(2)
+
+    if match.group(2):
+        return match.group(2)
+
+    if full_match.lower().startswith("goal-"):
+        return full_match
+
+    return captured
 
 
 def _parse_key_value_segments(segments: List[str]) -> Dict[str, str]:

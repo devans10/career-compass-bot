@@ -102,6 +102,14 @@ def test_parse_goal_add_supports_key_value_segments():
     }
 
 
+def test_parse_goal_add_preserves_goal_prefix():
+    command_text = "GOAL-12 Launch new onboarding | status=In Progress"
+
+    parsed = parsing.parse_goal_add(command_text, GOAL_STATUSES)
+
+    assert parsed["goalid"] == "GOAL-12"
+
+
 def test_parse_goal_status_change_extracts_notes():
     command_text = "#goal:G-7 Completed Released to customers"
 
