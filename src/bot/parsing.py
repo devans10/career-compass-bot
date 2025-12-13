@@ -22,15 +22,70 @@ def extract_goal_ids(text: str) -> List[str]:
 
     goal_ids = []
     for match in GOAL_ID_PATTERN.finditer(text or ""):
-        goal_ids.append(_goal_match_to_id(match))
+        goal_ids.append(_normalize_goal_id(_goal_match_to_id(match)))
 
-    return goal_ids
+    return _dedupe_preserve_order(goal_ids)
 
 
 def extract_competency_tags(text: str) -> List[str]:
     """Return a list of competency identifiers referenced in the text."""
 
-    return [match.group(1) for match in COMPETENCY_TAG_PATTERN.finditer(text or "")]
+    competency_ids = [match.group(1).lower() for match in COMPETENCY_TAG_PATTERN.finditer(text or "")]
+    return _dedupe_preserve_order(competency_ids)
+
+
+def extract_goal_and_competency_refs(text: str) -> Dict[str, List[str]]:
+    """Return normalized goal and competency references found in free-form text."""
+
+    return {
+        "goal_ids": extract_goal_ids(text),
+        "competency_ids": extract_competency_tags(text),
+    }
+
+
+def build_goal_competency_mappings(
+    entry_timestamp: str, entry_date: str, goal_ids: List[str], competency_ids: List[str]
+) -> List[Dict[str, str]]:
+    """Return GoalMappings rows for the provided identifiers."""
+
+    mappings: List[Dict[str, str]] = []
+
+    if goal_ids:
+        for goal_id in goal_ids:
+            if competency_ids:
+                for competency_id in competency_ids:
+                    mappings.append(
+                        {
+                            "entrytimestamp": entry_timestamp,
+                            "entrydate": entry_date,
+                            "goalid": goal_id,
+                            "competencyid": competency_id,
+                            "notes": "",
+                        }
+                    )
+            else:
+                mappings.append(
+                    {
+                        "entrytimestamp": entry_timestamp,
+                        "entrydate": entry_date,
+                        "goalid": goal_id,
+                        "competencyid": "",
+                        "notes": "",
+                    }
+                )
+    elif competency_ids:
+        for competency_id in competency_ids:
+            mappings.append(
+                {
+                    "entrytimestamp": entry_timestamp,
+                    "entrydate": entry_date,
+                    "goalid": "",
+                    "competencyid": competency_id,
+                    "notes": "",
+                }
+            )
+
+    return mappings
 
 
 def extract_command_argument(message_text: str) -> str:
@@ -159,6 +214,26 @@ def normalize_entry(
 def _parse_goal_token(token: str) -> str:
     match = GOAL_ID_PATTERN.search(token)
     return _goal_match_to_id(match) if match else token
+
+
+def _normalize_goal_id(goal_id: str) -> str:
+    if not goal_id:
+        return ""
+    if goal_id.lower().startswith("goal-"):
+        return f"GOAL-{goal_id[5:]}"
+    return goal_id
+
+
+def _dedupe_preserve_order(values: List[str]) -> List[str]:
+    seen: set[str] = set()
+    deduped: List[str] = []
+    for value in values:
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(value)
+    return deduped
 
 
 def _goal_match_to_id(match: re.Match) -> str:
