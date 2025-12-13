@@ -13,7 +13,7 @@ def test_register_handlers_adds_expected_handlers():
 
     handlers.register_handlers(application)
 
-    assert application.add_handler.call_count == 10
+    assert application.add_handler.call_count == 15
     application.add_error_handler.assert_called_once_with(handlers.handle_error)
 
 
