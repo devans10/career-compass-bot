@@ -58,6 +58,22 @@ def test_log_saves_entry_and_confirms():
     update.message.reply_text.assert_called_with("Logged task: Finish docs #writing\nTags: #writing")
 
 
+def test_log_writes_goal_and_competency_mappings():
+    storage_client = MagicMock()
+    storage_client.append_entry_async = AsyncMock()
+    storage_client.append_goal_mapping = MagicMock()
+    update = _make_update("/log Wrapped #goal:G-1 with coaching #comp:leadership")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.log_accomplishment(update, context))
+
+    storage_client.append_entry_async.assert_called_once()
+    storage_client.append_goal_mapping.assert_called_once()
+    mapping_args = storage_client.append_goal_mapping.call_args.args[0]
+    assert mapping_args["goalid"] == "G-1"
+    assert mapping_args["competencyid"] == "leadership"
+
+
 def test_log_handles_storage_errors():
     storage_client = MagicMock()
     storage_client.append_entry_async = AsyncMock(side_effect=Exception("boom"))

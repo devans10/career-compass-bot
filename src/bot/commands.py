@@ -7,7 +7,9 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.bot.parsing import (
+    build_goal_competency_mappings,
     extract_command_argument,
+    extract_goal_and_competency_refs,
     extract_tags,
     normalize_entry,
     parse_goal_add,
@@ -386,6 +388,7 @@ async def _log_with_type(
         return
 
     tags = extract_tags(entry_text)
+    refs = extract_goal_and_competency_refs(entry_text)
     record = normalize_entry(entry_text, entry_type=entry_type, tags=tags)
 
     storage_client = _get_storage_client(context)
@@ -404,6 +407,20 @@ async def _log_with_type(
             "Sorry, I couldn't save that right now. Please try again in a moment."
         )
         return
+
+    mappings = build_goal_competency_mappings(
+        record["timestamp"], record["date"], refs["goal_ids"], refs["competency_ids"]
+    )
+    if mappings:
+        try:
+            await asyncio.gather(
+                *[
+                    asyncio.to_thread(storage_client.append_goal_mapping, mapping)
+                    for mapping in mappings
+                ]
+            )
+        except Exception:
+            logger.exception("Failed to append goal/competency mappings", extra=_user_context(update))
 
     confirmation = ENTRY_TYPES.get(entry_type, "Logged entry")
     tag_text = f"\nTags: {' '.join(tags)}" if tags else ""

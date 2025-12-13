@@ -132,3 +132,34 @@ def test_parse_goal_link_supports_prefixes_and_notes():
         "competencyid": "leadership",
         "notes": "Added links to monthly review",
     }
+
+
+def test_extract_goal_and_competency_refs_dedupes_and_normalizes():
+    text = "#goal:goAL-22 #goal:goal-22 #comp:Leadership #comp:leadership"
+
+    refs = parsing.extract_goal_and_competency_refs(text)
+
+    assert refs == {"goal_ids": ["GOAL-22"], "competency_ids": ["leadership"]}
+
+
+def test_build_goal_competency_mappings_pairs_goal_and_competency():
+    mappings = parsing.build_goal_competency_mappings(
+        "2024-06-01T12:00:00", "2024-06-01", ["GOAL-1"], ["communication", "craft"]
+    )
+
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-01T12:00:00",
+            "entrydate": "2024-06-01",
+            "goalid": "GOAL-1",
+            "competencyid": "communication",
+            "notes": "",
+        },
+        {
+            "entrytimestamp": "2024-06-01T12:00:00",
+            "entrydate": "2024-06-01",
+            "goalid": "GOAL-1",
+            "competencyid": "craft",
+            "notes": "",
+        },
+    ]
