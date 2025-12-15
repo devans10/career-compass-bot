@@ -26,7 +26,30 @@ separate workers or services.
 
 ---
 
-## 2. Command & Journal Agent
+## 2. AI Summarization Agent
+
+**Purpose:** Condenses weekly or monthly logs into a concise paragraph when AI
+summaries are enabled.
+
+**Responsibilities:**
+- Build deterministic prompts that weave in tags, goal titles, and competency
+  labels.
+- Call the configured AI provider (OpenAI-compatible) with retries and fall
+  back to the built-in formatter on failure or when disabled.
+
+**Implemented by:**
+- `src/bot/ai_summarizer.py`
+- `src/bot/ai_client.py`
+
+**Key behaviors:**
+- Deterministic prompt creation from log entries, including goal/competency
+  metadata.
+- `/week` and `/month` can return AI-generated paragraphs when
+  `AI_SUMMARY_ENABLED=true`; otherwise, the classic summary format is used.
+
+---
+
+## 3. Command & Journal Agent
 
 **Purpose:** Implements the core behavior for logging, retrieving, and enriching
 entries with goal/competency context.
@@ -35,7 +58,8 @@ entries with goal/competency context.
 - Interpret user intent from commands.
 - Normalize data into a standard record format with tags and references.
 - Call the Storage Agent to persist or retrieve data.
-- Perform aggregation for weekly/monthly summaries and goal snapshots.
+- Perform aggregation for weekly/monthly summaries and goal snapshots, invoking
+  the AI Summarization Agent when enabled.
 
 **Implemented by:**
 - `src/bot/commands.py`
@@ -62,7 +86,7 @@ entries with goal/competency context.
 
 ---
 
-## 3. Storage Agent
+## 4. Storage Agent
 
 **Purpose:** Abstract storage operations so the rest of the bot doesn’t handle
 Google Sheets details directly.
@@ -92,7 +116,7 @@ Google Sheets details directly.
 
 ---
 
-## 4. Scheduler / Reminder Agent
+## 5. Scheduler / Reminder Agent
 
 **Purpose:** Proactively remind the user to log accomplishments and follow
 through on milestones or reviews.
@@ -118,7 +142,7 @@ through on milestones or reviews.
 
 ---
 
-## 5. Evaluation & Coaching Agent (Planned)
+## 6. Evaluation & Coaching Agent (Planned)
 
 **Purpose:** Use the logged data to help draft self-evaluations and provide
 growth suggestions.
