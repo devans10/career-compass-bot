@@ -128,7 +128,17 @@ def parse_goal_add(text: str, allowed_statuses: set[str]) -> Dict[str, str]:
     return {
         "goalid": goal_id,
         "title": title,
+        "description": key_values.pop("description", ""),
+        "weightpercentage": key_values.pop(
+            "weightpercentage", key_values.pop("weight", key_values.pop("weight_percent", ""))
+        ),
         "status": status,
+        "completionpercentage": key_values.pop(
+            "completionpercentage",
+            key_values.pop("completion", key_values.pop("complete", key_values.pop("completepercent", ""))),
+        ),
+        "startdate": key_values.pop("start", key_values.pop("startdate", "")),
+        "enddate": key_values.pop("end", key_values.pop("enddate", "")),
         "targetdate": key_values.pop("target", key_values.pop("targetdate", "")),
         "owner": key_values.pop("owner", ""),
         "notes": key_values.pop("notes", ""),
@@ -206,7 +216,7 @@ def parse_goal_milestone(text: str, allowed_statuses: set[str]) -> Dict[str, str
         milestone = segments[1]
 
     key_values = _parse_key_value_segments(segments[1:])
-    milestone = key_values.pop("milestone", milestone)
+    milestone = key_values.pop("title", key_values.pop("milestone", milestone))
     status = _normalize_status(key_values.pop("status", "Not Started"), allowed_statuses)
     completion = key_values.pop("completion", key_values.pop("completiondate", ""))
 
@@ -215,10 +225,10 @@ def parse_goal_milestone(text: str, allowed_statuses: set[str]) -> Dict[str, str
 
     return {
         "goalid": goal_id,
-        "milestone": milestone,
+        "title": milestone,
         "targetdate": target_date,
-        "status": status,
         "completiondate": completion,
+        "status": status,
         "notes": notes,
     }
 

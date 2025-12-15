@@ -7,11 +7,13 @@ Phase 2 introduces three new tabs to the Google Sheets workbook used by the bot.
 Create the tabs with the following names and headers in row 1:
 
 - **Goals**
-  - `GoalID`, `Title`, `Status`, `TargetDate`, `Owner`, `Notes`
+  - `GoalID`, `Title`, `Description`, `WeightPercentage`, `Status`, `CompletionPercentage`, `StartDate`, `EndDate`, `TargetDate`, `Owner`, `Notes`, `LifecycleStatus`, `SupersededBy`, `LastModified`, `Archived`, `History`
 - **Competencies**
   - `CompetencyID`, `Name`, `Category`, `Status`, `Description`
 - **GoalMappings**
   - `EntryTimestamp`, `EntryDate`, `GoalID`, `CompetencyID`, `Notes`
+- **GoalMilestones**
+  - `GoalID`, `Title`, `TargetDate`, `CompletionDate`, `Status`, `Notes`
 
 Use the existing **Accomplishments** tab and headers (`Timestamp`, `Date`, `Type`, `Text`, `Tags`, `Source`) unchanged.
 
@@ -19,7 +21,8 @@ Use the existing **Accomplishments** tab and headers (`Timestamp`, `Date`, `Type
 
 - **Goal statuses:** `Not Started`, `In Progress`, `Blocked`, `Completed`, `Deferred`
 - **Competency statuses:** `Active`, `Inactive`
-- **Date format:** All date fields (`TargetDate`, `EntryDate`) must use `YYYY-MM-DD`.
+- **Date format:** All date fields (`StartDate`, `EndDate`, `TargetDate`, `EntryDate`, `CompletionDate`) must use `YYYY-MM-DD`.
+- **Percentages:** `WeightPercentage` and `CompletionPercentage` must be numeric values between 0 and 100.
 
 ## Validation Behavior
 

@@ -23,7 +23,12 @@ ACCOMPLISHMENTS_HEADERS = HEADERS
 GOAL_HEADERS = [
     "GoalID",
     "Title",
+    "Description",
+    "WeightPercentage",
     "Status",
+    "CompletionPercentage",
+    "StartDate",
+    "EndDate",
     "TargetDate",
     "Owner",
     "Notes",
@@ -43,10 +48,10 @@ GOAL_MAPPING_HEADERS = ["EntryTimestamp", "EntryDate", "GoalID", "CompetencyID",
 
 GOAL_MILESTONE_HEADERS = [
     "GoalID",
-    "Milestone",
+    "Title",
     "TargetDate",
-    "Status",
     "CompletionDate",
+    "Status",
     "Notes",
 ]
 GOAL_MILESTONE_STATUSES = {"Not Started", "In Progress", "Blocked", "Completed", "Deferred"}
@@ -112,7 +117,12 @@ class GoogleSheetsClient:
             values=[
                 goal.get("goalid") or goal.get("goal_id") or goal.get("id", ""),
                 goal.get("title", ""),
+                goal.get("description", ""),
+                str(goal.get("weightpercentage", goal.get("weight_percentage", ""))).strip(),
                 goal.get("status", ""),
+                str(goal.get("completionpercentage", goal.get("completion_percentage", ""))).strip(),
+                goal.get("startdate") or goal.get("start_date", ""),
+                goal.get("enddate") or goal.get("end_date", ""),
                 goal.get("targetdate") or goal.get("target_date", ""),
                 goal.get("owner", ""),
                 goal.get("notes", ""),
@@ -193,12 +203,14 @@ class GoogleSheetsClient:
             headers=GOAL_MILESTONE_HEADERS,
             values=[
                 milestone.get("goalid") or milestone.get("goal_id") or milestone.get("goal", ""),
-                milestone.get("milestone", ""),
+                milestone.get("title")
+                or milestone.get("milestone")
+                or milestone.get("name", ""),
                 milestone.get("targetdate") or milestone.get("target_date", ""),
-                milestone.get("status", ""),
                 milestone.get("completiondate")
                 or milestone.get("completion_date")
                 or milestone.get("completedon", ""),
+                milestone.get("status", ""),
                 milestone.get("notes", ""),
             ],
             action="append_goal_milestone",
@@ -660,6 +672,32 @@ class GoogleSheetsClient:
             lifecycle_value, GOAL_LIFECYCLE_STATUSES, "Goals", row_number
         )
         record["lifecyclestatus"] = lifecycle_value
+        self._validate_percentage_field(
+            record.get("weightpercentage", ""),
+            field_name="WeightPercentage",
+            sheet_name="Goals",
+            row_number=row_number,
+        )
+        self._validate_percentage_field(
+            record.get("completionpercentage", ""),
+            field_name="CompletionPercentage",
+            sheet_name="Goals",
+            row_number=row_number,
+        )
+        self._validate_date_field(
+            record.get("startdate", ""),
+            field_name="StartDate",
+            sheet_name="Goals",
+            row_number=row_number,
+            allow_empty=True,
+        )
+        self._validate_date_field(
+            record.get("enddate", ""),
+            field_name="EndDate",
+            sheet_name="Goals",
+            row_number=row_number,
+            allow_empty=True,
+        )
         self._validate_date_field(
             record.get("targetdate", ""),
             field_name="TargetDate",
@@ -690,14 +728,16 @@ class GoogleSheetsClient:
             record.get("goalid", ""), "GoalID", "GoalMilestones", row_number
         )
         self._validate_non_empty(
-            record.get("milestone", ""), "Milestone", "GoalMilestones", row_number
+            record.get("title", ""), "Title", "GoalMilestones", row_number
         )
+        status_value = record.get("status", "") or "Not Started"
         self._validate_status(
-            record.get("status", ""),
+            status_value,
             GOAL_MILESTONE_STATUSES,
             "GoalMilestones",
             row_number,
         )
+        record["status"] = status_value
         self._validate_date_field(
             record.get("targetdate", ""),
             field_name="TargetDate",
@@ -846,6 +886,37 @@ class GoogleSheetsClient:
         self._validate_status(status, GOAL_STATUSES, "Goals", row_number=0)
         lifecycle = goal.get("lifecyclestatus") or goal.get("lifecycle_status", "Active")
         self._validate_status(lifecycle, GOAL_LIFECYCLE_STATUSES, "Goals", row_number=0)
+        self._validate_percentage_field(
+            goal.get("weightpercentage")
+            or goal.get("weight_percentage")
+            or goal.get("weight", ""),
+            field_name="WeightPercentage",
+            sheet_name="Goals",
+            row_number=0,
+        )
+        self._validate_percentage_field(
+            goal.get("completionpercentage")
+            or goal.get("completion_percentage")
+            or goal.get("complete_percentage")
+            or goal.get("completepercent", ""),
+            field_name="CompletionPercentage",
+            sheet_name="Goals",
+            row_number=0,
+        )
+        self._validate_date_field(
+            goal.get("startdate") or goal.get("start_date", ""),
+            field_name="StartDate",
+            sheet_name="Goals",
+            row_number=0,
+            allow_empty=True,
+        )
+        self._validate_date_field(
+            goal.get("enddate") or goal.get("end_date", ""),
+            field_name="EndDate",
+            sheet_name="Goals",
+            row_number=0,
+            allow_empty=True,
+        )
         self._validate_date_field(
             goal.get("targetdate") or goal.get("target_date", ""),
             field_name="TargetDate",
@@ -868,9 +939,19 @@ class GoogleSheetsClient:
             "GoalMilestones",
             row_number=0,
         )
-        self._validate_non_empty(milestone.get("milestone", ""), "Milestone", "GoalMilestones", 0)
+        self._validate_non_empty(
+            milestone.get("title")
+            or milestone.get("milestone")
+            or milestone.get("name", ""),
+            "Title",
+            "GoalMilestones",
+            0,
+        )
         self._validate_status(
-            milestone.get("status", ""), GOAL_MILESTONE_STATUSES, "GoalMilestones", row_number=0
+            milestone.get("status", "Not Started"),
+            GOAL_MILESTONE_STATUSES,
+            "GoalMilestones",
+            row_number=0,
         )
         self._validate_date_field(
             milestone.get("targetdate") or milestone.get("target_date", ""),
@@ -1011,6 +1092,24 @@ class GoogleSheetsClient:
         if not value:
             raise ValueError(
                 f"Field '{field_name}' is required in sheet '{sheet_name}' at row {row_number}"
+            )
+
+    @staticmethod
+    def _validate_percentage_field(
+        value: str, *, field_name: str, sheet_name: str, row_number: int
+    ) -> None:
+        if value in (None, ""):
+            return
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Field '{field_name}' must be a number between 0 and 100 in sheet '{sheet_name}' at row {row_number}"
+            ) from exc
+
+        if numeric_value < 0 or numeric_value > 100:
+            raise ValueError(
+                f"Field '{field_name}' must be between 0 and 100 in sheet '{sheet_name}' at row {row_number}"
             )
 
     @staticmethod

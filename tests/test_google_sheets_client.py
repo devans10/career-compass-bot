@@ -157,7 +157,26 @@ def test_goal_sheet_validation_requires_tab_and_correct_rows():
     service = FakeSheetsService()
     goals_sheet = service.ensure_sheet("Goals")
     goals_sheet["header"] = GOAL_HEADERS
-    goals_sheet["values"].append(["1", "Ship", "Done", "2024-12-31", "Me", ""])
+    goals_sheet["values"].append(
+        [
+            "1",
+            "Ship",
+            "Desc",
+            "50",
+            "Done",
+            "10",
+            "2024-01-01",
+            "2024-12-31",
+            "2024-12-31",
+            "Me",
+            "",
+            "Active",
+            "",
+            "",
+            "",
+            "",
+        ]
+    )
     client = GoogleSheetsClient("spreadsheet-id", service=service)
 
     with pytest.raises(ValueError, match="Invalid status 'Done'"):
@@ -221,7 +240,7 @@ def test_trimmed_rows_are_padded_for_goal_related_sheets():
     goals_sheet = service.ensure_sheet("Goals")
     goals_sheet["header"] = GOAL_HEADERS
     goals_sheet["values"].append(
-        ["G-1", "Ship", "In Progress", "2024-12-31"]  # Missing Owner, Notes
+        ["G-1", "Ship", "", "", "In Progress", "", "", "", "2024-12-31"]
     )
 
     competencies_sheet = service.ensure_sheet("Competencies")
@@ -246,7 +265,12 @@ def test_trimmed_rows_are_padded_for_goal_related_sheets():
         {
             "goalid": "G-1",
             "title": "Ship",
+            "description": "",
+            "weightpercentage": "",
             "status": "In Progress",
+            "completionpercentage": "",
+            "startdate": "",
+            "enddate": "",
             "targetdate": "2024-12-31",
             "owner": "",
             "notes": "",
@@ -285,7 +309,7 @@ def test_goal_milestones_and_reviews_round_trip():
 
     milestone = {
         "goalid": "G-1",
-        "milestone": "Kickoff",
+        "title": "Kickoff",
         "status": "In Progress",
         "targetdate": "2024-01-01",
         "completiondate": "",
@@ -299,7 +323,7 @@ def test_goal_milestones_and_reviews_round_trip():
     milestones = client.get_goal_milestones()
     reviews = client.get_goal_reviews()
 
-    assert milestones[0]["milestone"] == "Kickoff"
+    assert milestones[0]["title"] == "Kickoff"
     assert reviews[0]["reviewtype"] == "midyear"
 
 

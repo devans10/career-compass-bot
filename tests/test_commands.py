@@ -446,7 +446,7 @@ def test_goal_milestone_done_marks_completed():
 
     args = storage_client.append_goal_milestone.call_args.args[0]
     assert args["status"] == "Completed"
-    assert args["milestone"] == "Kickoff"
+    assert args["title"] == "Kickoff"
 
 
 def test_goal_edit_updates_existing_goal():
