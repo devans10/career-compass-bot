@@ -175,7 +175,7 @@ Use these guards to avoid schema validation failures:
 
 - Goal statuses must be one of: Not Started, In Progress, Blocked, Completed, Deferred.
 - Competency statuses must be Active or Inactive.
-- GoalMappings rows link entries to `GoalID`/`CompetencyID` pairs and require ISO dates (`YYYY-MM-DD`).
+- GoalMappings rows link entries to either `GoalID` or `CompetencyID` values (not both) and require ISO dates (`YYYY-MM-DD`).
 ---
 ### 8. Container build & runtime
 

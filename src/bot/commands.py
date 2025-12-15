@@ -576,13 +576,14 @@ async def link_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     now = datetime.utcnow()
-    mapping = {
-        "entrytimestamp": now.isoformat(),
-        "entrydate": now.date().isoformat(),
-        "goalid": parsed.get("goalid", ""),
-        "competencyid": parsed.get("competencyid", ""),
-        "notes": parsed.get("notes", ""),
-    }
+    mappings = build_goal_competency_mappings(
+        now.isoformat(),
+        now.date().isoformat(),
+        [parsed["goalid"]] if parsed.get("goalid") else [],
+        [parsed["competencyid"]] if parsed.get("competencyid") else [],
+    )
+    for mapping in mappings:
+        mapping["notes"] = parsed.get("notes", "")
 
     storage_client = _get_storage_client(context)
     if not storage_client:
@@ -590,7 +591,12 @@ async def link_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        await asyncio.to_thread(storage_client.append_goal_mapping, mapping)
+        await asyncio.gather(
+            *[
+                asyncio.to_thread(storage_client.append_goal_mapping, mapping)
+                for mapping in mappings
+            ]
+        )
     except Exception:
         logger.exception("Failed to append goal mapping", extra=_user_context(update))
         await update.message.reply_text("Sorry, I couldn't record that link. Please try again later.")

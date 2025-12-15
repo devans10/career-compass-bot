@@ -193,7 +193,6 @@ def test_append_goal_mapping_and_read_back():
             "entrytimestamp": "2024-06-01T12:00:00Z",
             "entrydate": "2024-06-01",
             "goal_id": "G-123",
-            "competency_id": "C-456",
             "notes": "Linked",
         }
     )
@@ -203,6 +202,25 @@ def test_append_goal_mapping_and_read_back():
     assert len(mappings) == 1
     assert mappings[0]["goalid"] == "G-123"
     assert service.ensure_sheet("GoalMappings")["values"][-1][0] == "2024-06-01T12:00:00Z"
+
+
+def test_append_competency_mapping_and_read_back():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    client.append_goal_mapping(
+        {
+            "entrytimestamp": "2024-06-02T12:00:00Z",
+            "entrydate": "2024-06-02",
+            "competency_id": "C-456",
+            "notes": "Competency focus",
+        }
+    )
+
+    mappings = client.get_goal_mappings()
+
+    assert mappings[0]["competencyid"] == "C-456"
 
 
 def test_append_goal_and_competency_validation():
@@ -229,9 +247,19 @@ def test_goal_mapping_requires_goal_or_competency():
     service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
     client = GoogleSheetsClient("spreadsheet-id", service=service)
 
-    with pytest.raises(ValueError, match="requires at least a GoalID or CompetencyID"):
+    with pytest.raises(ValueError, match="requires exactly one of GoalID or CompetencyID"):
         client.append_goal_mapping(
             {"entrytimestamp": "2024-06-01T12:00:00Z", "entrydate": "2024-06-01"}
+        )
+
+    with pytest.raises(ValueError, match="either a GoalID or CompetencyID, not both"):
+        client.append_goal_mapping(
+            {
+                "entrytimestamp": "2024-06-01T12:00:00Z",
+                "entrydate": "2024-06-01",
+                "goalid": "G-1",
+                "competencyid": "C-1",
+            }
         )
 
 

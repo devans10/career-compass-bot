@@ -68,7 +68,8 @@ def test_entry_logging_and_goal_mapping_flow_with_fake_sheets():
 
     mappings = service.ensure_sheet("GoalMappings")["values"]
     assert mappings
-    assert any(row[2] == "GOAL-1" and row[3] == "communication" for row in mappings)
+    assert any(row[2] == "GOAL-1" for row in mappings)
+    assert any(row[3] == "communication" for row in mappings)
 
     summary_update = _make_update("/week")
     asyncio.run(commands.get_week_summary(summary_update, context))
