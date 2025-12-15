@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Optional AI-powered `/week` and `/month` summaries when `AI_SUMMARY_ENABLED` is configured.
+
 ## V0.1.0 - 12-13-2025
 
 ### Added
