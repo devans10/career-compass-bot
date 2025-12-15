@@ -124,31 +124,32 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Then fill in:
-| Variable | Description |
-|----------|-------------|
-| TELEGRAM_BOT_TOKEN          | Token provided by BotFather |
-| SPREADSHEET_ID              | ID of your Google Sheet |
-| TELEGRAM_ALLOWED_USERS      | Optional comma-separated list of Telegram user IDs allowed to interact with the bot (e.g., `12345,67890`) |
-| SERVICE_ACCOUNT_FILE        | Path to your service account JSON file (required if SERVICE_ACCOUNT_JSON is not set) |
-| SERVICE_ACCOUNT_JSON        | Raw JSON string for service account credentials (required if SERVICE_ACCOUNT_FILE is not set) |
-| AI_SUMMARY_ENABLED          | Set to `true` to enable AI-powered `/week` and `/month` summaries (defaults to `false`) |
-| AI_API_KEY                  | API key for your LLM provider (required when AI summaries are enabled) |
-| AI_MODEL                    | Model name to use with the provider (e.g., `gpt-4o-mini`) |
-| AI_ENDPOINT                 | Optional custom base URL for the AI provider (useful for gateways or self-hosted endpoints) |
-| LOG_LEVEL                   | Logging level (INFO by default) |
-| TIMEZONE                    | IANA timezone for scheduling/logging (e.g., America/New_York or UTC) |
-| REMINDERS_ENABLED           | Set to `false` to disable scheduled reminders |
-| REMINDER_CHAT_ID            | Telegram chat ID to receive reminders (required if reminders are enabled) |
-| REMINDER_DAY_OF_WEEK        | Day to send reminders (`mon`–`sun`) |
-| REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
-| REMINDER_MESSAGE            | Custom reminder text |
-| FOCUS_REMINDERS_ENABLED     | Toggle Monday focus reminders that highlight goals/milestones |
-| FOCUS_REMINDER_DAY_OF_WEEK  | Day to send focus suggestions (`mon`–`sun`, defaults to Monday) |
-| FOCUS_REMINDER_TIME         | Time to send focus reminders in 24h `HH:MM` format |
-| FOCUS_REMINDER_MESSAGE      | Intro line for the focus reminder payload |
-| FOCUS_UPCOMING_WINDOW_DAYS  | How many days ahead to check for target dates (defaults to 14) |
-| FOCUS_INACTIVITY_DAYS       | Flag goals as inactive if no activity within this many days (defaults to 14) |
+Fill in the values that apply to your setup. The bot requires `TELEGRAM_BOT_TOKEN`, `SPREADSHEET_ID`, and **one** of `SERVICE_ACCOUNT_FILE` or `SERVICE_ACCOUNT_JSON` to start. Reminders and AI summaries are optional and can be toggled independently.
+
+| Variable | Required? | Description |
+|----------|-----------|-------------|
+| TELEGRAM_BOT_TOKEN          | Yes | Token provided by BotFather. |
+| SPREADSHEET_ID              | Yes | ID of your Google Sheet. |
+| TELEGRAM_ALLOWED_USERS      | No  | Comma-separated list of Telegram user IDs allowed to interact with the bot (e.g., `12345,67890`). Leave blank to allow anyone who knows the bot handle. |
+| SERVICE_ACCOUNT_FILE        | Conditional | Path to your service account JSON file (provide this **or** `SERVICE_ACCOUNT_JSON`). |
+| SERVICE_ACCOUNT_JSON        | Conditional | Raw JSON string for service account credentials (provide this **or** `SERVICE_ACCOUNT_FILE`). |
+| LOG_LEVEL                   | No  | Logging level (`INFO` by default). |
+| TIMEZONE                    | No  | IANA timezone for scheduling/logging (e.g., `America/New_York` or `UTC`). |
+| REMINDERS_ENABLED           | No  | Set to `false` to disable scheduled reminders. |
+| REMINDER_CHAT_ID            | Conditional | Telegram chat ID to receive reminders (required when reminders are enabled). |
+| REMINDER_DAY_OF_WEEK        | No  | Day to send reminders (`mon`–`sun`, defaults to `fri`). |
+| REMINDER_TIME               | No  | Time to send reminders in 24h `HH:MM` format (defaults to `15:00`). |
+| REMINDER_MESSAGE            | No  | Custom reminder text. |
+| FOCUS_REMINDERS_ENABLED     | No  | Toggle focus reminders that highlight goals/milestones (defaults to `true`). |
+| FOCUS_REMINDER_DAY_OF_WEEK  | No  | Day to send focus suggestions (`mon`–`sun`, defaults to Monday). |
+| FOCUS_REMINDER_TIME         | No  | Time to send focus reminders in 24h `HH:MM` format (defaults to `09:00`). |
+| FOCUS_REMINDER_MESSAGE      | No  | Intro line for the focus reminder payload. |
+| FOCUS_UPCOMING_WINDOW_DAYS  | No  | Days ahead to check for target dates (defaults to `14`). |
+| FOCUS_INACTIVITY_DAYS       | No  | Flag goals as inactive if no activity within this many days (defaults to `14`). |
+| AI_SUMMARY_ENABLED          | No  | Set to `true` to enable AI-powered `/week` and `/month` summaries (defaults to `false`). |
+| AI_API_KEY                  | Conditional | API key for your LLM provider (required when AI summaries are enabled). |
+| AI_MODEL                    | Conditional | Model name to use with the provider (e.g., `gpt-4o-mini`). |
+| AI_ENDPOINT                 | No  | Optional custom base URL for the AI provider (useful for gateways or self-hosted endpoints). |
 
 #### AI-powered summaries for `/week` and `/month`
 
@@ -182,19 +183,50 @@ Timestamps honor the configured `TIMEZONE` and follow the format
 (INFO by default).
 
 ---
-### 7. Enable Google Sheets API
-1. Create a Google Cloud project
-2. Enable Google Sheets API
-3. Create a Service Account
-4. Generate a JSON key file
-5. Share your Google Sheet with:
+### 7. Enable Google Sheets API and prepare the workbook
+1. Create (or use) a Google Cloud project.
+2. Enable the **Google Sheets API**.
+3. Create a **Service Account** and generate a JSON key file (download it for `SERVICE_ACCOUNT_FILE` or copy the JSON into `SERVICE_ACCOUNT_JSON`).
+4. Share your Google Sheet with the service account email:
 
 ```php-template
 <service-account-name>@<project-id>.iam.gserviceaccount.com
 ```
 
-Add the Phase 2 tabs (**Goals**, **Competencies**, **GoalMappings**) and headers described in
-[`docs/GOOGLE_SHEETS_MIGRATION.md`](docs/GOOGLE_SHEETS_MIGRATION.md) before using goal/competency features.
+5. Create the tabs and headers below so the bot can validate writes/reads. Each block is copy/paste-ready for **row 1** of each tab:
+
+```csv
+Accomplishments
+Timestamp,Date,Type,Text,Tags,Source
+
+Goals
+GoalID,Title,Description,WeightPercentage,Status,CompletionPercentage,StartDate,EndDate,TargetDate,Owner,Notes,LifecycleStatus,SupersededBy,LastModified,Archived,History
+
+GoalMilestones
+GoalID,Title,TargetDate,CompletionDate,Status,Notes
+
+GoalMappings
+EntryTimestamp,EntryDate,GoalID,CompetencyID,Notes
+
+GoalReviews
+GoalID,ReviewType,Notes,Rating,ReviewedOn
+
+GoalEvaluations
+GoalID,EvaluationType,Notes,Rating,EvaluatedOn
+
+Competencies
+CompetencyID,Name,Category,Status,Description
+
+CompetencyEvaluations
+CompetencyID,Notes,Rating,EvaluatedOn
+
+ReminderSettings
+Category,TargetID,Frequency,Enabled,Channel,Notes
+```
+
+Paste each section into its own tab (add a new sheet → rename it to the section title → paste the header row into line 1). If you prefer importing, save each section as a separate `.csv` file and use File → Import → Upload → Replace data for that tab. The existing **Accomplishments** tab must keep the six base headers shown above.
+
+Add the Phase 2 tabs (**Goals**, **Competencies**, **GoalMappings**, **GoalMilestones**, **GoalReviews**, **GoalEvaluations**, **CompetencyEvaluations**, **ReminderSettings**) and headers exactly as described here or in [`docs/GOOGLE_SHEETS_MIGRATION.md`](docs/GOOGLE_SHEETS_MIGRATION.md).
 Use these guards to avoid schema validation failures:
 
 - Goal statuses must be one of: Not Started, In Progress, Blocked, Completed, Deferred.
