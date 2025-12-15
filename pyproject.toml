@@ -24,11 +24,11 @@ dependencies = [
     "pytz>=2024.1",
 ]
 
-# Optional: If you want AI rewriting/summarization in Phase 2
-# Uncomment when ready
-# dependencies += [
-#     "openai>=1.0.0"
-# ]
+#Optional: If you want AI rewriting/summarization in Phase 2
+#Uncomment when ready
+dependencies += [
+    "openai>=1.0.0"
+]
 
 [project.optional-dependencies]
 dev = [
