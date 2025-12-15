@@ -191,6 +191,146 @@ def parse_goal_link(text: str) -> Dict[str, str]:
     return {"goalid": goal_id, "competencyid": competency_id, "notes": notes}
 
 
+def parse_goal_milestone(text: str, allowed_statuses: set[str]) -> Dict[str, str]:
+    """Parse milestone payloads into structured fields."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return {}
+
+    segments = [segment.strip() for segment in cleaned.split("|") if segment.strip()]
+    head_tokens = segments[0].split(maxsplit=1)
+    goal_id = _parse_goal_token(head_tokens[0]) if head_tokens else ""
+    milestone = head_tokens[1].strip() if len(head_tokens) > 1 else ""
+    if not milestone and len(segments) > 1:
+        milestone = segments[1]
+
+    key_values = _parse_key_value_segments(segments[1:])
+    milestone = key_values.pop("milestone", milestone)
+    status = _normalize_status(key_values.pop("status", "Not Started"), allowed_statuses)
+    completion = key_values.pop("completion", key_values.pop("completiondate", ""))
+
+    target_date = key_values.pop("target", key_values.pop("targetdate", ""))
+    notes = key_values.pop("notes", "")
+
+    return {
+        "goalid": goal_id,
+        "milestone": milestone,
+        "targetdate": target_date,
+        "status": status,
+        "completiondate": completion,
+        "notes": notes,
+    }
+
+
+def parse_goal_edit(text: str, allowed_statuses: set[str]) -> Dict[str, str]:
+    """Parse lifecycle edits for a goal."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return {}
+
+    segments = [segment.strip() for segment in cleaned.split("|") if segment.strip()]
+    head_tokens = segments[0].split(maxsplit=1)
+    goal_id = _parse_goal_token(head_tokens[0]) if head_tokens else ""
+    title = head_tokens[1].strip() if len(head_tokens) > 1 else ""
+
+    key_values = _parse_key_value_segments(segments[1:])
+    if not title:
+        title = key_values.pop("title", "")
+
+    status = key_values.pop("status", "")
+    lifecycle_status = key_values.pop("lifecycle", "") or key_values.pop("lifecyclestatus", "")
+    superseded_by = key_values.pop("superseded", "") or key_values.pop("superseded_by", "")
+    archived = key_values.pop("archived", "")
+
+    normalized_status = _normalize_status(status, allowed_statuses) if status else ""
+
+    return {
+        "goalid": goal_id,
+        "title": title,
+        "status": normalized_status,
+        "targetdate": key_values.pop("target", key_values.pop("targetdate", "")),
+        "owner": key_values.pop("owner", ""),
+        "notes": key_values.pop("notes", ""),
+        "lifecyclestatus": lifecycle_status,
+        "supersededby": superseded_by,
+        "archived": archived,
+    }
+
+
+def parse_goal_review(text: str) -> Dict[str, str]:
+    """Parse review payloads for mid-year or other review types."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return {}
+
+    segments = [segment.strip() for segment in cleaned.split("|") if segment.strip()]
+    head_tokens = segments[0].split(maxsplit=1)
+    goal_id = _parse_goal_token(head_tokens[0]) if head_tokens else ""
+    notes = head_tokens[1].strip() if len(head_tokens) > 1 else ""
+
+    key_values = _parse_key_value_segments(segments[1:])
+    notes = key_values.pop("notes", notes)
+    review_type = key_values.pop("type", key_values.pop("reviewtype", "midyear"))
+    rating = key_values.pop("rating", "")
+    reviewed_on = key_values.pop("date", key_values.pop("reviewedon", ""))
+
+    return {
+        "goalid": goal_id,
+        "notes": notes,
+        "reviewtype": review_type,
+        "rating": rating,
+        "reviewedon": reviewed_on,
+    }
+
+
+def parse_goal_evaluation(text: str, default_type: str) -> Dict[str, str]:
+    """Parse year-end evaluation payloads for goals and competencies."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return {}
+
+    segments = [segment.strip() for segment in cleaned.split("|") if segment.strip()]
+    head_tokens = segments[0].split(maxsplit=1)
+    identifier = _parse_goal_token(head_tokens[0]) if head_tokens else ""
+    notes = head_tokens[1].strip() if len(head_tokens) > 1 else ""
+
+    key_values = _parse_key_value_segments(segments[1:])
+    notes = key_values.pop("notes", notes)
+    rating = key_values.pop("rating", "")
+    evaluation_type = key_values.pop("type", key_values.pop("evaluationtype", default_type))
+    evaluated_on = key_values.pop("date", key_values.pop("evaluatedon", ""))
+
+    return {
+        "id": identifier,
+        "notes": notes,
+        "rating": rating,
+        "evaluationtype": evaluation_type,
+        "evaluatedon": evaluated_on,
+    }
+
+
+def parse_reminder_setting(text: str) -> Dict[str, str]:
+    """Parse reminder configuration payloads."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return {}
+
+    key_values = _parse_key_value_segments([segment.strip() for segment in cleaned.split("|") if segment.strip()])
+    return {
+        "category": key_values.get("category", ""),
+        "targetid": key_values.get("goal") or key_values.get("target", ""),
+        "frequency": key_values.get("frequency", ""),
+        "enabled": key_values.get("enabled", "true"),
+        "channel": key_values.get("channel", "telegram"),
+        "notes": key_values.get("notes", ""),
+    }
+
+
 def normalize_entry(
     text: str,
     entry_type: str,

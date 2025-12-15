@@ -14,10 +14,19 @@ from src.bot.parsing import (
     extract_tags,
     normalize_entry,
     parse_goal_add,
+    parse_goal_edit,
+    parse_goal_evaluation,
     parse_goal_link,
+    parse_goal_milestone,
+    parse_goal_review,
     parse_goal_status_change,
+    parse_reminder_setting,
 )
-from src.storage.google_sheets_client import GOAL_STATUSES
+from src.storage.google_sheets_client import (
+    GOAL_LIFECYCLE_STATUSES,
+    GOAL_MILESTONE_STATUSES,
+    GOAL_STATUSES,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +54,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /task <text> — note a follow-up task\n"
         "• /idea <text> — jot down a new idea\n"
         "• /goal_add <id> | <title> — add a goal (e.g., status=In Progress)\n"
+        "• /goal_milestone_add <id> | <milestone> — track milestones\n"
         "• /goal_list — review saved goals\n"
         "• /week — see the last 7 days\n"
         "• /month — see the last 30 days"
@@ -68,6 +78,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /idea Explore automating weekly summaries\n"
         "• /goal_add GOAL-12 | Ship onboarding revamp | status=In Progress\n"
         "• /goal_status GOAL-12 Completed Shipped to production\n"
+        "• /goal_milestone_add GOAL-12 | Launch beta | target=2024-09-01\n"
+        "• /review_midyear GOAL-12 | rating=Strong | notes=Great trajectory\n"
+        "• /eval_goal GOAL-12 | rating=Exceeds | notes=Impact summary\n"
+        "• /reminder_settings category=milestone | frequency=weekly | enabled=true\n"
         "• /goal_link #goal:GOAL-12 #comp:communication Linked to sprint demo\n"
         "• /week — quick snapshot of the last 7 days\n"
         "• /month — review the last 30 days\n\n"
@@ -181,11 +195,135 @@ async def list_goals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         target = f" (target {goal['targetdate']})" if goal.get("targetdate") else ""
         owner = f" — owner: {goal['owner']}" if goal.get("owner") else ""
         notes = f" — notes: {goal['notes']}" if goal.get("notes") else ""
+        milestone_rollup = _format_milestone_rollup(goal.get("goalid", ""), context)
+        milestone_suffix = f" — milestones: {milestone_rollup}" if milestone_rollup else ""
+        lifecycle = goal.get("lifecyclestatus") or "Active"
         lines.append(
-            f"• {goal['goalid']}: {goal['title']} [{goal['status']}{target}{owner}{notes}]"
+            f"• {goal['goalid']}: {goal['title']} [{goal['status']} ({lifecycle}){target}{owner}{notes}]{milestone_suffix}"
         )
 
     await update.message.reply_text("\n".join(lines))
+
+
+async def add_goal_milestone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Append a milestone to the GoalMilestones sheet."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    logger.info("Handling /goal_milestone_add", extra=_user_context(update))
+    try:
+        milestone = parse_goal_milestone(message_text, GOAL_MILESTONE_STATUSES)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    if not milestone.get("goalid") or not milestone.get("milestone"):
+        await update.message.reply_text(
+            "Please provide a goal id and milestone name. Example: /goal_milestone_add GOAL-1 | Kickoff | target=2024-05-01"
+        )
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't save milestones.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal_milestone, milestone)
+    except Exception:
+        logger.exception("Failed to append milestone", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that milestone. Please try again later.")
+        return
+
+    await update.message.reply_text(
+        f"Milestone added for {milestone['goalid']}: {milestone['milestone']} ({milestone['status']})"
+    )
+
+
+async def list_goal_milestones(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List milestones for a goal or all goals."""
+
+    if not update.message:
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't fetch milestones.")
+        return
+
+    goal_filter = extract_command_argument(update.message.text or "").strip()
+    if goal_filter:
+        goal_filter = goal_filter.split()[0]
+
+    try:
+        milestones = await asyncio.to_thread(storage_client.get_goal_milestones)
+    except Exception:
+        logger.exception("Failed to fetch milestones", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't load milestones right now.")
+        return
+
+    if goal_filter:
+        milestones = [m for m in milestones if m.get("goalid") == goal_filter]
+
+    if not milestones:
+        await update.message.reply_text("No milestones found. Add one with /goal_milestone_add.")
+        return
+
+    lines = ["Goal milestones:"]
+    for ms in milestones:
+        target = f" target {ms['targetdate']}" if ms.get("targetdate") else ""
+        completion = f", completed {ms['completiondate']}" if ms.get("completiondate") else ""
+        notes = f" — {ms['notes']}" if ms.get("notes") else ""
+        lines.append(
+            f"• {ms['goalid']}: {ms['milestone']} [{ms['status']}{target}{completion}]{notes}"
+        )
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def complete_goal_milestone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mark a milestone as completed by appending a new row."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    try:
+        parsed = parse_goal_milestone(message_text, GOAL_MILESTONE_STATUSES)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    if not parsed.get("goalid") or not parsed.get("milestone"):
+        await update.message.reply_text(
+            "Please provide a goal id and milestone name. Example: /goal_milestone_done GOAL-1 | Kickoff"
+        )
+        return
+
+    completion_date = parsed.get("completiondate") or datetime.utcnow().date().isoformat()
+    milestone = {
+        **parsed,
+        "status": "Completed",
+        "completiondate": completion_date,
+    }
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't update milestones.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal_milestone, milestone)
+    except Exception:
+        logger.exception("Failed to append milestone completion", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record that completion.")
+        return
+
+    await update.message.reply_text(
+        f"Marked milestone '{milestone['milestone']}' for {milestone['goalid']} as completed on {completion_date}."
+    )
 
 
 async def update_goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,6 +386,165 @@ async def update_goal_status(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 
+async def edit_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Edit goal lifecycle fields while preserving audit trail."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    logger.info("Handling /goal_edit command", extra=_user_context(update))
+    try:
+        parsed = parse_goal_edit(message_text, GOAL_STATUSES)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    goal_id = parsed.get("goalid")
+    if not goal_id:
+        await update.message.reply_text("Please provide a goal id to edit. Example: /goal_edit GOAL-1 | title=New title")
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't edit goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to load goals for edit", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't load goals to edit right now.")
+        return
+
+    existing = next((goal for goal in goals if goal.get("goalid") == goal_id), None)
+    if not existing:
+        await update.message.reply_text("I couldn't find that goal. Use /goal_list to review IDs.")
+        return
+
+    updated_goal = {
+        **existing,
+        **{k: v for k, v in parsed.items() if v},
+        "goalid": goal_id,
+        "lastmodified": datetime.utcnow().isoformat(),
+        "lifecyclestatus": parsed.get("lifecyclestatus") or "Updated",
+    }
+    updated_goal["history"] = "Edited via bot"
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal, updated_goal)
+    except Exception:
+        logger.exception("Failed to append goal edit", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record that edit.")
+        return
+
+    await update.message.reply_text(f"Updated goal {goal_id} with new details.")
+
+
+async def archive_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Archive a goal by appending a lifecycle change."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    goal_id = message_text.split()[0] if message_text else ""
+    reason = message_text[len(goal_id) :].strip() if goal_id else ""
+
+    if not goal_id:
+        await update.message.reply_text("Please include a goal id. Example: /goal_archive GOAL-1 Deprecated")
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't archive goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to load goals for archive", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't archive that goal right now.")
+        return
+
+    existing = next((goal for goal in goals if goal.get("goalid") == goal_id), None)
+    if not existing:
+        await update.message.reply_text("I couldn't find that goal. Use /goal_list to review IDs.")
+        return
+
+    archived_goal = {
+        **existing,
+        "lifecyclestatus": "Archived",
+        "archived": "TRUE",
+        "notes": reason or existing.get("notes", ""),
+        "lastmodified": datetime.utcnow().isoformat(),
+        "history": "Archived via bot",
+    }
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal, archived_goal)
+    except Exception:
+        logger.exception("Failed to append archive", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record the archive right now.")
+        return
+
+    await update.message.reply_text(f"Archived goal {goal_id}. Reason: {reason or 'n/a'}")
+
+
+async def supersede_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mark a goal as superseded by another goal."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    tokens = message_text.split(maxsplit=2)
+    if len(tokens) < 2:
+        await update.message.reply_text(
+            "Please provide the original and replacement goal IDs. Example: /goal_supersede GOAL-1 GOAL-2 migrated"
+        )
+        return
+
+    original, replacement = tokens[0], tokens[1]
+    reason = tokens[2] if len(tokens) > 2 else ""
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't supersede goals.")
+        return
+
+    try:
+        goals = await asyncio.to_thread(storage_client.get_goals)
+    except Exception:
+        logger.exception("Failed to load goals for supersede", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't load goals right now.")
+        return
+
+    existing = next((goal for goal in goals if goal.get("goalid") == original), None)
+    if not existing:
+        await update.message.reply_text("I couldn't find that goal. Use /goal_list to review IDs.")
+        return
+
+    superseded_goal = {
+        **existing,
+        "lifecyclestatus": "Superseded",
+        "supersededby": replacement,
+        "lastmodified": datetime.utcnow().isoformat(),
+        "history": reason or "Superseded",
+    }
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal, superseded_goal)
+    except Exception:
+        logger.exception("Failed to append supersede", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't record the supersede.")
+        return
+
+    await update.message.reply_text(
+        f"Marked {original} as superseded by {replacement}. Notes: {reason or 'n/a'}"
+    )
+
+
 async def link_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Link a goal (and optional competency) to the latest work entry timestamp."""
 
@@ -292,6 +589,168 @@ async def link_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def log_midyear_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Capture a mid-year review entry for a goal."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    review = parse_goal_review(message_text)
+    review.setdefault("reviewtype", "midyear")
+    if not review.get("goalid"):
+        await update.message.reply_text(
+            "Please include a goal id. Example: /review_midyear GOAL-1 | rating=Strong | notes=Great progress"
+        )
+        return
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't log the review.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal_review, review)
+    except Exception:
+        logger.exception("Failed to append midyear review", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that review right now.")
+        return
+
+    await update.message.reply_text(
+        f"Logged mid-year review for {review['goalid']} with rating {review.get('rating') or 'n/a'}."
+    )
+
+
+async def evaluate_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Record a year-end evaluation for a goal."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    evaluation = parse_goal_evaluation(message_text, default_type="yearend")
+    if not evaluation.get("id"):
+        await update.message.reply_text(
+            "Please include a goal id. Example: /eval_goal GOAL-1 | rating=Exceeds | notes=Delivered impact"
+        )
+        return
+
+    payload = {
+        "goalid": evaluation["id"],
+        "evaluationtype": evaluation.get("evaluationtype", "yearend"),
+        "notes": evaluation.get("notes", ""),
+        "rating": evaluation.get("rating", ""),
+        "evaluatedon": evaluation.get("evaluatedon", ""),
+    }
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't save evaluations.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_goal_evaluation, payload)
+    except Exception:
+        logger.exception("Failed to append goal evaluation", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that evaluation.")
+        return
+
+    await update.message.reply_text(
+        f"Recorded evaluation for goal {payload['goalid']} with rating {payload.get('rating') or 'n/a'}."
+    )
+
+
+async def evaluate_competency(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Record a competency evaluation entry."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    evaluation = parse_goal_evaluation(message_text, default_type="competency")
+    if not evaluation.get("id"):
+        await update.message.reply_text(
+            "Please include a competency id. Example: /eval_competency communication | rating=Meets | notes=Presented monthly"
+        )
+        return
+
+    payload = {
+        "competencyid": evaluation["id"],
+        "notes": evaluation.get("notes", ""),
+        "rating": evaluation.get("rating", ""),
+        "evaluatedon": evaluation.get("evaluatedon", ""),
+    }
+
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't save evaluations.")
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_competency_evaluation, payload)
+    except Exception:
+        logger.exception("Failed to append competency evaluation", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that competency evaluation.")
+        return
+
+    await update.message.reply_text(
+        f"Recorded competency evaluation for {payload['competencyid']} with rating {payload.get('rating') or 'n/a'}."
+    )
+
+
+async def configure_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Enable or list reminder settings for milestones and reviews."""
+
+    if not update.message:
+        return
+
+    message_text = extract_command_argument(update.message.text or "")
+    storage_client = _get_storage_client(context)
+    if not storage_client:
+        await update.message.reply_text("Storage is not configured yet, so I can't manage reminders.")
+        return
+
+    if not message_text:
+        try:
+            settings = await asyncio.to_thread(storage_client.get_reminder_settings)
+        except Exception:
+            logger.exception("Failed to fetch reminder settings", extra=_user_context(update))
+            await update.message.reply_text("Sorry, I couldn't load reminder settings.")
+            return
+
+        if not settings:
+            await update.message.reply_text("No reminder settings saved yet. Use /reminder_settings category=milestone | frequency=weekly")
+            return
+
+        lines = ["Reminder settings:"]
+        for setting in settings:
+            notes = f" — {setting['notes']}" if setting.get("notes") else ""
+            lines.append(
+                f"• {setting['category']} {setting.get('targetid') or ''} freq={setting.get('frequency')} enabled={setting.get('enabled')} channel={setting.get('channel')}{notes}"
+            )
+
+        await update.message.reply_text("\n".join(lines))
+        return
+
+    parsed = parse_reminder_setting(message_text)
+    if not parsed.get("category"):
+        await update.message.reply_text(
+            "Please include a category (milestone/review). Example: /reminder_settings category=milestone | frequency=weekly"
+        )
+        return
+
+    try:
+        await asyncio.to_thread(storage_client.append_reminder_setting, parsed)
+    except Exception:
+        logger.exception("Failed to save reminder setting", extra=_user_context(update))
+        await update.message.reply_text("Sorry, I couldn't save that reminder setting.")
+        return
+
+    await update.message.reply_text(
+        f"Saved reminder setting for {parsed.get('category')} (enabled={parsed.get('enabled')})."
+    )
+
+
 async def goals_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Summarize goals by status and target dates."""
 
@@ -323,6 +782,8 @@ async def goals_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     for status in sorted(status_counts):
         lines.append(f"• {status}: {status_counts.get(status, 0)}")
 
+    milestones_by_goal = _load_milestone_rollups(context)
+
     upcoming = [goal for goal in goals if goal.get("targetdate")]
     if upcoming:
         upcoming.sort(key=lambda g: g.get("targetdate"))
@@ -330,9 +791,11 @@ async def goals_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lines.append("Target dates:")
         for goal in upcoming:
             owner_text = f" (owner: {goal['owner']})" if goal.get("owner") else ""
+            milestone_progress = milestones_by_goal.get(goal.get("goalid", ""))
+            milestone_suffix = f" — milestones: {milestone_progress}" if milestone_progress else ""
             lines.append(
                 f"• {goal['targetdate']}: {goal['goalid']} — {goal['title']} [{goal['status']}]"
-                f"{owner_text}"
+                f"{owner_text}{milestone_suffix}"
             )
 
     await update.message.reply_text("\n".join(lines))
@@ -614,6 +1077,49 @@ def _attach_goal_metadata(
         )
 
     return enriched_entries
+
+
+def _load_milestone_rollups(context: ContextTypes.DEFAULT_TYPE) -> Dict[str, str]:
+    """Return completed/total rollups for milestones keyed by goal id."""
+
+    storage_client = _get_storage_client(context)
+    if not storage_client or not hasattr(storage_client, "get_goal_milestones"):
+        return {}
+
+    try:
+        milestones = storage_client.get_goal_milestones()
+    except Exception:
+        return {}
+
+    if not isinstance(milestones, list):
+        return {}
+
+    rollups: Dict[str, str] = {}
+    for milestone in milestones:
+        goal_id = milestone.get("goalid", "")
+        if not goal_id:
+            continue
+        rollups.setdefault(goal_id, {"total": 0, "done": 0, "completed_dates": []})
+        rollups[goal_id]["total"] += 1
+        if milestone.get("status") == "Completed":
+            rollups[goal_id]["done"] += 1
+            if milestone.get("completiondate"):
+                rollups[goal_id]["completed_dates"].append(milestone.get("completiondate"))
+
+    formatted: Dict[str, str] = {}
+    for goal_id, counts in rollups.items():
+        completed = counts.get("done", 0)
+        total = counts.get("total", 0)
+        formatted[goal_id] = f"{completed}/{total} done"
+        if counts.get("completed_dates"):
+            formatted[goal_id] += f" (latest {sorted(counts['completed_dates'])[-1]})"
+
+    return formatted
+
+
+def _format_milestone_rollup(goal_id: str, context: ContextTypes.DEFAULT_TYPE) -> str:
+    rollups = _load_milestone_rollups(context)
+    return rollups.get(goal_id, "")
 
 
 def _format_goal_metadata(goal: Dict[str, str]) -> str:

@@ -262,6 +262,7 @@ def test_list_goals_formats_results():
             "notes": "Pilot phase",
         }
     ]
+    storage_client.get_goal_milestones.return_value = []
     update = _make_update("/goal_list")
     context = _make_context(storage_client)
 
@@ -389,6 +390,7 @@ def test_goals_summary_returns_status_counts():
             "notes": "",
         },
     ]
+    storage_client.get_goal_milestones.return_value = []
     update = _make_update("/goals_summary")
     context = _make_context(storage_client)
 
@@ -408,3 +410,159 @@ def test_goals_summary_handles_empty_list():
     asyncio.run(commands.goals_summary(update, context))
 
     update.message.reply_text.assert_called_once()
+
+
+def test_start_and_help_responses():
+    message = SimpleNamespace(text="/start", reply_text=AsyncMock())
+    update = SimpleNamespace(message=message, effective_user=SimpleNamespace(id=1, username="tester"))
+    context = _make_context()
+
+    asyncio.run(commands.start(update, context))
+    update.message.reply_text.assert_called_once()
+
+    help_message = SimpleNamespace(text="/help", reply_text=AsyncMock())
+    help_update = SimpleNamespace(message=help_message, effective_user=SimpleNamespace(id=1, username="tester"))
+    asyncio.run(commands.help_command(help_update, context))
+    help_update.message.reply_text.assert_called_once()
+
+
+def test_goal_milestone_add_saves_and_confirms():
+    storage_client = MagicMock()
+    update = _make_update("/goal_milestone_add G-1 | Kickoff | target=2024-01-01")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.add_goal_milestone(update, context))
+
+    storage_client.append_goal_milestone.assert_called_once()
+    assert "Milestone added" in update.message.reply_text.call_args.args[0]
+
+
+def test_goal_milestone_done_marks_completed():
+    storage_client = MagicMock()
+    update = _make_update("/goal_milestone_done G-1 | Kickoff")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.complete_goal_milestone(update, context))
+
+    args = storage_client.append_goal_milestone.call_args.args[0]
+    assert args["status"] == "Completed"
+    assert args["milestone"] == "Kickoff"
+
+
+def test_goal_edit_updates_existing_goal():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {"goalid": "G-1", "title": "Old", "status": "Not Started", "targetdate": "", "owner": "", "notes": ""}
+    ]
+    update = _make_update("/goal_edit G-1 | title=New Title | status=In Progress")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.edit_goal(update, context))
+
+    storage_client.append_goal.assert_called_once()
+    payload = storage_client.append_goal.call_args.args[0]
+    assert payload["title"] == "New Title"
+    assert payload["status"] == "In Progress"
+
+
+def test_midyear_review_is_logged():
+    storage_client = MagicMock()
+    update = _make_update("/review_midyear G-1 | rating=Strong | notes=Solid")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.log_midyear_review(update, context))
+
+    storage_client.append_goal_review.assert_called_once()
+    assert "Logged mid-year review" in update.message.reply_text.call_args.args[0]
+
+
+def test_goal_evaluation_is_logged():
+    storage_client = MagicMock()
+    update = _make_update("/eval_goal G-1 | rating=Exceeds | notes=Great")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.evaluate_goal(update, context))
+
+    storage_client.append_goal_evaluation.assert_called_once()
+    assert "Recorded evaluation for goal" in update.message.reply_text.call_args.args[0]
+
+
+def test_competency_evaluation_is_logged():
+    storage_client = MagicMock()
+    update = _make_update("/eval_competency communication | rating=Meets")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.evaluate_competency(update, context))
+
+    storage_client.append_competency_evaluation.assert_called_once()
+
+
+def test_archive_and_supersede_goal():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {"goalid": "G-1", "title": "Old", "status": "In Progress", "targetdate": "", "owner": "", "notes": ""}
+    ]
+
+    archive_update = _make_update("/goal_archive G-1 No longer needed")
+    context = _make_context(storage_client)
+    asyncio.run(commands.archive_goal(archive_update, context))
+    storage_client.append_goal.assert_called()
+
+    supersede_update = _make_update("/goal_supersede G-1 G-2 Updated scope")
+    asyncio.run(commands.supersede_goal(supersede_update, context))
+    assert storage_client.append_goal.call_count == 2
+
+
+def test_list_goal_milestones_filters_by_goal():
+    storage_client = MagicMock()
+    storage_client.get_goal_milestones.return_value = [
+        {"goalid": "G-1", "milestone": "Kickoff", "status": "Not Started", "targetdate": "", "completiondate": "", "notes": ""},
+        {"goalid": "G-2", "milestone": "Beta", "status": "Completed", "targetdate": "", "completiondate": "2024-01-01", "notes": ""},
+    ]
+    update = _make_update("/goal_milestone_list G-1")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.list_goal_milestones(update, context))
+
+    output = update.message.reply_text.call_args.args[0]
+    assert "G-1" in output
+    assert "G-2" not in output
+
+
+def test_goals_summary_includes_milestone_rollup():
+    storage_client = MagicMock()
+    storage_client.get_goals.return_value = [
+        {"goalid": "G-1", "title": "Ship", "status": "In Progress", "targetdate": "2024-01-01", "owner": "", "notes": ""}
+    ]
+    storage_client.get_goal_milestones.return_value = [
+        {"goalid": "G-1", "milestone": "Kickoff", "status": "Completed", "targetdate": "", "completiondate": "2024-01-01", "notes": ""}
+    ]
+    update = _make_update("/goals_summary")
+    context = _make_context(storage_client)
+
+    asyncio.run(commands.goals_summary(update, context))
+
+    assert "milestones: 1/1" in update.message.reply_text.call_args.args[0]
+
+
+def test_reminder_settings_list_and_save():
+    storage_client = MagicMock()
+    storage_client.get_reminder_settings.return_value = [
+        {
+            "category": "milestone",
+            "targetid": "G-1",
+            "frequency": "weekly",
+            "enabled": "true",
+            "channel": "telegram",
+            "notes": "",
+        }
+    ]
+
+    list_update = _make_update("/reminder_settings")
+    context = _make_context(storage_client)
+    asyncio.run(commands.configure_reminders(list_update, context))
+    assert "Reminder settings" in list_update.message.reply_text.call_args.args[0]
+
+    save_update = _make_update("/reminder_settings category=review | frequency=monthly")
+    asyncio.run(commands.configure_reminders(save_update, context))
+    storage_client.append_reminder_setting.assert_called_once()

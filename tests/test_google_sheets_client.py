@@ -6,8 +6,13 @@ import pytest
 from src.storage.google_sheets_client import (
     COMPETENCY_HEADERS,
     COMPETENCY_STATUSES,
+    COMPETENCY_EVALUATION_HEADERS,
     GOAL_HEADERS,
     GOAL_MAPPING_HEADERS,
+    GOAL_MILESTONE_HEADERS,
+    GOAL_REVIEW_HEADERS,
+    GOAL_EVALUATION_HEADERS,
+    REMINDER_SETTINGS_HEADERS,
     GOAL_STATUSES,
     HEADERS,
     GoogleSheetsClient,
@@ -245,6 +250,11 @@ def test_trimmed_rows_are_padded_for_goal_related_sheets():
             "targetdate": "2024-12-31",
             "owner": "",
             "notes": "",
+            "lifecyclestatus": "Active",
+            "supersededby": "",
+            "lastmodified": "",
+            "archived": "",
+            "history": "",
         }
     ]
     assert competencies == [
@@ -265,6 +275,63 @@ def test_trimmed_rows_are_padded_for_goal_related_sheets():
             "notes": "",
         }
     ]
+
+
+def test_goal_milestones_and_reviews_round_trip():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalMilestones")["header"] = GOAL_MILESTONE_HEADERS
+    service.ensure_sheet("GoalReviews")["header"] = GOAL_REVIEW_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    milestone = {
+        "goalid": "G-1",
+        "milestone": "Kickoff",
+        "status": "In Progress",
+        "targetdate": "2024-01-01",
+        "completiondate": "",
+        "notes": "",
+    }
+    client.append_goal_milestone(milestone)
+
+    review = {"goalid": "G-1", "reviewtype": "midyear", "rating": "Strong", "notes": "", "reviewedon": "2024-06-01"}
+    client.append_goal_review(review)
+
+    milestones = client.get_goal_milestones()
+    reviews = client.get_goal_reviews()
+
+    assert milestones[0]["milestone"] == "Kickoff"
+    assert reviews[0]["reviewtype"] == "midyear"
+
+
+def test_goal_and_competency_evaluations_round_trip():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalEvaluations")["header"] = GOAL_EVALUATION_HEADERS
+    service.ensure_sheet("CompetencyEvaluations")["header"] = COMPETENCY_EVALUATION_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    goal_eval = {"goalid": "G-1", "evaluationtype": "yearend", "rating": "Exceeds", "notes": "", "evaluatedon": "2024-12-31"}
+    comp_eval = {"competencyid": "communication", "rating": "Meets", "notes": "", "evaluatedon": "2024-12-31"}
+
+    client.append_goal_evaluation(goal_eval)
+    client.append_competency_evaluation(comp_eval)
+
+    goal_evals = client.get_goal_evaluations()
+    comp_evals = client.get_competency_evaluations()
+
+    assert goal_evals[0]["evaluationtype"] == "yearend"
+    assert comp_evals[0]["competencyid"] == "communication"
+
+
+def test_reminder_settings_append_and_fetch():
+    service = FakeSheetsService()
+    service.ensure_sheet("ReminderSettings")["header"] = REMINDER_SETTINGS_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    client.append_reminder_setting({"category": "milestone", "targetid": "G-1", "frequency": "weekly", "enabled": True, "channel": "telegram", "notes": ""})
+
+    reminders = client.get_reminder_settings()
+
+    assert reminders[0]["category"] == "milestone"
 
 
 def test_goal_mapping_header_and_date_validation():
