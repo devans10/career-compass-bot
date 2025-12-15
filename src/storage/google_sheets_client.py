@@ -869,9 +869,10 @@ class GoogleSheetsClient:
         goal_id = record.get("goalid")
         competency_id = record.get("competencyid")
         if goal_id and competency_id:
-            raise ValueError(
-                "GoalMappings row must reference either a GoalID or CompetencyID, not both "
-                f"(sheet 'GoalMappings', row {row_number})"
+            logger.warning(
+                "GoalMappings row contains both GoalID and CompetencyID; treating as a "
+                "legacy dual-link row (sheet 'GoalMappings', row %s)",
+                row_number,
             )
         if not goal_id and not competency_id:
             raise ValueError(

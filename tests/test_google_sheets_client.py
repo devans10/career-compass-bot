@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -400,6 +401,31 @@ def test_goal_mapping_header_and_date_validation():
 
     with pytest.raises(ValueError, match="must match %Y-%m-%d"):
         client.get_goal_mappings()
+
+
+def test_goal_mappings_accepts_legacy_goal_and_competency_rows(caplog):
+    service = FakeSheetsService()
+    sheet = service.ensure_sheet("GoalMappings")
+    sheet["header"] = GOAL_MAPPING_HEADERS
+    sheet["values"].append(
+        ["2024-06-01T12:00:00Z", "2024-06-01", "G-1", "C-1", "Legacy link"]
+    )
+
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with caplog.at_level(logging.WARNING):
+        mappings = client.get_goal_mappings()
+
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "C-1",
+            "notes": "Legacy link",
+        }
+    ]
+    assert any("legacy dual-link" in message for message in caplog.messages)
 
 
 def test_load_credentials_validates_service_account_json(monkeypatch):
