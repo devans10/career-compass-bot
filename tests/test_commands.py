@@ -137,6 +137,27 @@ def test_summary_formats_entries():
     assert "• [Task] 2024-05-02: Schedule retro" in summary_text
 
 
+def test_ai_summary_used_when_enabled():
+    storage_client = MagicMock()
+    storage_client.get_entries_by_date_range_async = AsyncMock(
+        return_value=[{"date": "2024-06-01", "type": "task", "text": "Draft plan", "tags": ""}]
+    )
+    storage_client.get_goal_mappings.return_value = []
+    storage_client.get_goals.return_value = []
+    storage_client.get_competencies.return_value = []
+    update = _make_update("/week")
+    context = _make_context(storage_client)
+    ai_summarizer = AsyncMock(return_value="AI summary text")
+    context.application.bot_data["ai_summary_enabled"] = True
+    context.application.bot_data["ai_summarizer"] = ai_summarizer
+
+    asyncio.run(commands.get_week_summary(update, context))
+
+    ai_summarizer.assert_awaited_once()
+    assert ai_summarizer.await_args.kwargs["entries"]
+    update.message.reply_text.assert_called_once_with("AI summary text")
+
+
 def test_summary_includes_goal_and_competency_links():
     entry_date = date.today().isoformat()
     timestamp = f"{entry_date}T00:00:00Z"
@@ -186,6 +207,26 @@ def test_summary_includes_goal_and_competency_links():
     summary_text = update.message.reply_text.call_args.args[0]
     assert "Goals: G-1 — Ship onboarding (In Progress)" in summary_text
     assert "Competencies: Communication — Core (Active)" in summary_text
+
+
+def test_ai_summary_falls_back_when_error():
+    storage_client = MagicMock()
+    storage_client.get_entries_by_date_range_async = AsyncMock(
+        return_value=[{"date": "2024-06-01", "type": "task", "text": "Draft plan", "tags": ""}]
+    )
+    storage_client.get_goal_mappings.return_value = []
+    storage_client.get_goals.return_value = []
+    storage_client.get_competencies.return_value = []
+    update = _make_update("/week")
+    context = _make_context(storage_client)
+    context.application.bot_data["ai_summary_enabled"] = True
+    context.application.bot_data["ai_summarizer"] = AsyncMock(side_effect=Exception("boom"))
+
+    asyncio.run(commands.get_week_summary(update, context))
+
+    summary_text = update.message.reply_text.call_args.args[0]
+    assert summary_text.startswith("Entries from")
+    assert "Draft plan" in summary_text
 
 
 def test_summary_handles_storage_failure():
