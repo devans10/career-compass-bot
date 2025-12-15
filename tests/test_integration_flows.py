@@ -32,7 +32,9 @@ def test_goal_add_and_list_flow_with_fake_sheets():
     asyncio.run(commands.add_goal(add_update, context))
 
     goals_sheet = service.ensure_sheet("Goals")
-    assert goals_sheet["values"][0][:3] == ["GOAL-55", "Ship beta", "In Progress"]
+    assert goals_sheet["values"][0][0] == "GOAL-55"
+    assert goals_sheet["values"][0][1] == "Ship beta"
+    assert goals_sheet["values"][0][4] == "In Progress"
 
     list_update = _make_update("/goal_list")
     asyncio.run(commands.list_goals(list_update, context))
@@ -40,7 +42,7 @@ def test_goal_add_and_list_flow_with_fake_sheets():
     reply_text = list_update.message.reply_text.call_args.args[0]
     assert "GOAL-55" in reply_text
     assert "In Progress" in reply_text
-    assert "owner: Alex" in reply_text
+    assert "owner Alex" in reply_text
 
 
 def test_entry_logging_and_goal_mapping_flow_with_fake_sheets():

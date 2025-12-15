@@ -192,14 +192,27 @@ async def list_goals(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     lines = ["Goals:"]
     for goal in goals:
-        target = f" (target {goal['targetdate']})" if goal.get("targetdate") else ""
-        owner = f" — owner: {goal['owner']}" if goal.get("owner") else ""
-        notes = f" — notes: {goal['notes']}" if goal.get("notes") else ""
+        details = [f"{goal['status']} ({goal.get('lifecyclestatus') or 'Active'})"]
+        if goal.get("weightpercentage"):
+            details.append(f"weight {goal['weightpercentage']}%")
+        if goal.get("completionpercentage"):
+            details.append(f"complete {goal['completionpercentage']}%")
+        if goal.get("startdate") or goal.get("enddate"):
+            details.append(f"{goal.get('startdate', '')}→{goal.get('enddate', '')}".strip("→"))
+        if goal.get("targetdate"):
+            details.append(f"target {goal['targetdate']}")
+        if goal.get("owner"):
+            details.append(f"owner {goal['owner']}")
+        note_parts = []
+        if goal.get("description"):
+            note_parts.append(goal.get("description"))
+        if goal.get("notes"):
+            note_parts.append(f"notes: {goal['notes']}")
+        notes = f" — {'; '.join(note_parts)}" if note_parts else ""
         milestone_rollup = _format_milestone_rollup(goal.get("goalid", ""), context)
         milestone_suffix = f" — milestones: {milestone_rollup}" if milestone_rollup else ""
-        lifecycle = goal.get("lifecyclestatus") or "Active"
         lines.append(
-            f"• {goal['goalid']}: {goal['title']} [{goal['status']} ({lifecycle}){target}{owner}{notes}]{milestone_suffix}"
+            f"• {goal['goalid']}: {goal['title']} [{'; '.join(details)}]{notes}{milestone_suffix}"
         )
 
     await update.message.reply_text("\n".join(lines))
@@ -219,7 +232,7 @@ async def add_goal_milestone(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(str(exc))
         return
 
-    if not milestone.get("goalid") or not milestone.get("milestone"):
+    if not milestone.get("goalid") or not milestone.get("title"):
         await update.message.reply_text(
             "Please provide a goal id and milestone name. Example: /goal_milestone_add GOAL-1 | Kickoff | target=2024-05-01"
         )
@@ -238,7 +251,7 @@ async def add_goal_milestone(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     await update.message.reply_text(
-        f"Milestone added for {milestone['goalid']}: {milestone['milestone']} ({milestone['status']})"
+        f"Milestone added for {milestone['goalid']}: {milestone['title']} ({milestone['status']})"
     )
 
 
@@ -276,8 +289,9 @@ async def list_goal_milestones(update: Update, context: ContextTypes.DEFAULT_TYP
         target = f" target {ms['targetdate']}" if ms.get("targetdate") else ""
         completion = f", completed {ms['completiondate']}" if ms.get("completiondate") else ""
         notes = f" — {ms['notes']}" if ms.get("notes") else ""
+        title = ms.get("title") or ms.get("milestone", "")
         lines.append(
-            f"• {ms['goalid']}: {ms['milestone']} [{ms['status']}{target}{completion}]{notes}"
+            f"• {ms['goalid']}: {title} [{ms['status']}{target}{completion}]{notes}"
         )
 
     await update.message.reply_text("\n".join(lines))
@@ -296,7 +310,7 @@ async def complete_goal_milestone(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(str(exc))
         return
 
-    if not parsed.get("goalid") or not parsed.get("milestone"):
+    if not parsed.get("goalid") or not parsed.get("title"):
         await update.message.reply_text(
             "Please provide a goal id and milestone name. Example: /goal_milestone_done GOAL-1 | Kickoff"
         )
@@ -322,7 +336,7 @@ async def complete_goal_milestone(update: Update, context: ContextTypes.DEFAULT_
         return
 
     await update.message.reply_text(
-        f"Marked milestone '{milestone['milestone']}' for {milestone['goalid']} as completed on {completion_date}."
+        f"Marked milestone '{milestone['title']}' for {milestone['goalid']} as completed on {completion_date}."
     )
 
 
