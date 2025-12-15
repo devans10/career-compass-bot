@@ -1,8 +1,9 @@
 import asyncio
 import inspect
 import logging
+import os
 from datetime import date, datetime, timedelta
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -30,6 +31,13 @@ from src.storage.google_sheets_client import (
 
 
 logger = logging.getLogger(__name__)
+AI_SUMMARY_ENABLED = os.getenv("AI_SUMMARY_ENABLED", "false").lower() not in {
+    "false",
+    "0",
+    "no",
+    "off",
+    "",
+}
 MAX_ENTRY_LENGTH = 1000
 ENTRY_TYPES = {
     "accomplishment": "Logged accomplishment",
@@ -944,7 +952,13 @@ async def _send_summary(update: Update, context: ContextTypes.DEFAULT_TYPE, days
         )
         return
 
-    summary = _format_summary(entries, start_date, end_date)
+    ai_summary = None
+    if _is_ai_summary_enabled(context):
+        ai_summary = await _summarize_entries_with_ai(
+            update, context, entries, start_date, end_date
+        )
+
+    summary = ai_summary or _format_summary(entries, start_date, end_date)
     await update.message.reply_text(summary)
 
 
@@ -978,6 +992,65 @@ def _start_date_for_range(days: int) -> date:
 
     offset = max(days - 1, 0)
     return date.today() - timedelta(days=offset)
+
+
+def _is_ai_summary_enabled(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Check whether AI summarization is enabled via bot data or environment."""
+
+    if hasattr(context, "application") and getattr(context.application, "bot_data", None) is not None:
+        flag = context.application.bot_data.get("ai_summary_enabled")
+        if flag is not None:
+            return bool(flag)
+
+    if hasattr(context, "bot_data"):
+        flag = context.bot_data.get("ai_summary_enabled")
+        if flag is not None:
+            return bool(flag)
+
+    return AI_SUMMARY_ENABLED
+
+
+def _get_ai_summarizer(context: ContextTypes.DEFAULT_TYPE) -> Optional[Callable[..., object]]:
+    """Retrieve an optional AI summarizer callable from bot data."""
+
+    if hasattr(context, "application") and getattr(context.application, "bot_data", None) is not None:
+        summarizer = context.application.bot_data.get("ai_summarizer")
+        if summarizer:
+            return summarizer
+
+    if hasattr(context, "bot_data"):
+        summarizer = context.bot_data.get("ai_summarizer")
+        if summarizer:
+            return summarizer
+
+    return None
+
+
+async def _summarize_entries_with_ai(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    entries: List[Dict[str, str]],
+    start_date: date,
+    end_date: date,
+) -> Optional[str]:
+    """Invoke an AI summarizer when configured, falling back on errors."""
+
+    summarizer = _get_ai_summarizer(context)
+    if not summarizer:
+        return None
+
+    try:
+        if inspect.iscoroutinefunction(summarizer):
+            return await summarizer(entries=entries, start_date=start_date, end_date=end_date)
+        result = await asyncio.to_thread(
+            summarizer, entries=entries, start_date=start_date, end_date=end_date
+        )
+        if inspect.isawaitable(result):
+            return await result
+        return result
+    except Exception:
+        logger.exception("AI summarization failed", extra=_user_context(update))
+        return None
 
 
 def _format_summary(entries: List[Dict[str, str]], start_date: date, end_date: date) -> str:
