@@ -3,6 +3,7 @@ import logging
 from telegram.ext import Application, ApplicationBuilder
 
 from src.bot.ai_client import AIClient
+from src.bot.ai_summarizer import create_ai_summarizer
 from src.bot.handlers import register_handlers
 from src.bot.scheduler import start_scheduler_from_config
 from src.config import load_config
@@ -49,6 +50,7 @@ def build_application() -> Application:
             endpoint=config.ai_endpoint,
         )
         application.bot_data["ai_client"] = ai_client
+        application.bot_data["ai_summarizer"] = create_ai_summarizer(ai_client)
         logger.info(
             "AI client initialized",
             extra={"ai_model": config.ai_model, "ai_endpoint": config.ai_endpoint},
