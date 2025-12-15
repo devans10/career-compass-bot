@@ -143,6 +143,12 @@ Then fill in:
 | REMINDER_DAY_OF_WEEK        | Day to send reminders (`mon`–`sun`) |
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
+| FOCUS_REMINDERS_ENABLED     | Toggle Monday focus reminders that highlight goals/milestones |
+| FOCUS_REMINDER_DAY_OF_WEEK  | Day to send focus suggestions (`mon`–`sun`, defaults to Monday) |
+| FOCUS_REMINDER_TIME         | Time to send focus reminders in 24h `HH:MM` format |
+| FOCUS_REMINDER_MESSAGE      | Intro line for the focus reminder payload |
+| FOCUS_UPCOMING_WINDOW_DAYS  | How many days ahead to check for target dates (defaults to 14) |
+| FOCUS_INACTIVITY_DAYS       | Flag goals as inactive if no activity within this many days (defaults to 14) |
 
 #### AI-powered summaries for `/week` and `/month`
 
@@ -225,10 +231,11 @@ the same command.
   and that `SERVICE_ACCOUNT_FILE`/`SERVICE_ACCOUNT_JSON` paths are correct. Quota exhaustion will
   return 429 errors—spread calls out, reduce reminder frequency, or request higher limits in the
   Google Cloud Console.
-- **Reminder schedule/timezone changes:** Update `REMINDER_DAY_OF_WEEK`, `REMINDER_TIME`, and
-  `TIMEZONE` in your environment (.env or container env vars) and restart the process so the
-  scheduler picks up the new cadence. Setting `REMINDERS_ENABLED=false` skips scheduler startup
-  entirely if you prefer external scheduling.
+- **Reminder schedule/timezone changes:** Update `REMINDER_DAY_OF_WEEK`, `REMINDER_TIME`,
+  `FOCUS_REMINDER_DAY_OF_WEEK`, and `FOCUS_REMINDER_TIME` (plus `TIMEZONE`) in your environment
+  (.env or container env vars) and restart the process so the scheduler picks up the new cadence.
+  Setting `REMINDERS_ENABLED=false` skips scheduler startup entirely if you prefer external
+  scheduling.
 
 
 ## 🤖 Commands

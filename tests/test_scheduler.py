@@ -1,5 +1,5 @@
 import asyncio
-from datetime import time
+from datetime import date, timedelta, time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,6 +8,7 @@ import pytest
 from src.bot.scheduler import (
     DEFAULT_REMINDER_MESSAGE,
     ReminderScheduler,
+    build_weekly_focus_message,
     parse_reminder_time,
     send_reminder_now,
     start_scheduler_from_config,
@@ -154,15 +155,8 @@ def test_start_scheduler_from_config_disabled():
 
 def test_start_scheduler_from_config_configures_scheduler(monkeypatch):
     application = SimpleNamespace(bot=None, bot_data={}, create_task=lambda *args, **kwargs: None)
-    fake_scheduler = SimpleNamespace(start_weekly=lambda day_of_week, run_time: None)
 
-    def fake_reminder_scheduler(**kwargs):
-        fake_scheduler.application = kwargs["application"]
-        fake_scheduler.chat_id = kwargs["chat_id"]
-        fake_scheduler.reminder_message = kwargs["reminder_message"]
-        return fake_scheduler
-
-    monkeypatch.setattr("src.bot.scheduler.ReminderScheduler", fake_reminder_scheduler)
+    monkeypatch.setattr("src.bot.scheduler.BackgroundScheduler", DummyScheduler)
 
     config = SimpleNamespace(
         reminders_enabled=True,
@@ -172,11 +166,57 @@ def test_start_scheduler_from_config_configures_scheduler(monkeypatch):
         reminder_minute=5,
         reminder_message=DEFAULT_REMINDER_MESSAGE,
         timezone="UTC",
+        focus_reminders_enabled=False,
     )
 
     scheduler = start_scheduler_from_config(application, config)
 
-    assert scheduler is fake_scheduler
-    assert application.bot_data["reminder_scheduler"] is fake_scheduler
-    assert fake_scheduler.chat_id == 7
-    assert fake_scheduler.reminder_message == DEFAULT_REMINDER_MESSAGE
+    assert scheduler.chat_id == 7
+    assert scheduler.reminder_message == DEFAULT_REMINDER_MESSAGE
+    assert application.bot_data["reminder_scheduler"] is scheduler
+    assert scheduler.scheduler.jobs[0]["id"] == "weekly_reflection_reminder"
+
+
+def test_build_weekly_focus_message_highlights_upcoming_and_stale_goals():
+    today = date.today()
+    upcoming_goal_date = (today + timedelta(days=3)).isoformat()
+    upcoming_milestone_date = (today + timedelta(days=5)).isoformat()
+
+    class FakeStorage:
+        def get_goals(self):
+            return [
+                {
+                    "goalid": "GOAL-1",
+                    "title": "Ship onboarding",
+                    "targetdate": upcoming_goal_date,
+                    "status": "In Progress",
+                },
+                {"goalid": "GOAL-2", "title": "Refactor", "status": "Not Started"},
+            ]
+
+        def get_goal_milestones(self):
+            return [
+                {
+                    "goalid": "GOAL-1",
+                    "title": "Beta launch",
+                    "targetdate": upcoming_milestone_date,
+                    "status": "In Progress",
+                }
+            ]
+
+        def get_goal_mappings(self):
+            return [
+                {"goalid": "GOAL-1", "entrydate": (today - timedelta(days=1)).isoformat()},
+            ]
+
+    message = build_weekly_focus_message(
+        FakeStorage(),
+        timezone="UTC",
+        upcoming_window_days=14,
+        inactivity_days=7,
+    )
+
+    assert "Upcoming target dates" in message
+    assert "Goal GOAL-1" in message
+    assert "Beta launch" in message
+    assert "GOAL-2" in message
