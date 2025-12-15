@@ -27,6 +27,13 @@ class Config:
     reminder_hour: int = 15
     reminder_minute: int = 0
     reminder_message: str = "Weekly check-in: what were your top 3 accomplishments this week?"
+    focus_reminders_enabled: bool = True
+    focus_reminder_day_of_week: str = "mon"
+    focus_reminder_hour: int = 9
+    focus_reminder_minute: int = 0
+    focus_reminder_message: str = "Here are a few goals and milestones to focus on this week."
+    focus_upcoming_window_days: int = 14
+    focus_inactivity_days: int = 14
 
 
 def load_config() -> Config:
@@ -66,6 +73,20 @@ def load_config() -> Config:
         "REMINDER_MESSAGE", "Weekly check-in: what were your top 3 accomplishments this week?"
     )
 
+    focus_reminders_enabled = os.getenv("FOCUS_REMINDERS_ENABLED", "true").lower() not in {
+        "false",
+        "0",
+        "no",
+    }
+    focus_reminder_day_of_week = _validate_day_of_week(os.getenv("FOCUS_REMINDER_DAY_OF_WEEK", "mon"))
+    focus_reminder_time = os.getenv("FOCUS_REMINDER_TIME", "09:00")
+    focus_reminder_hour, focus_reminder_minute = _parse_time(focus_reminder_time)
+    focus_reminder_message = os.getenv(
+        "FOCUS_REMINDER_MESSAGE", "Here are a few goals and milestones to focus on this week."
+    )
+    focus_upcoming_window_days = _parse_positive_int(os.getenv("FOCUS_UPCOMING_WINDOW_DAYS", "14"))
+    focus_inactivity_days = _parse_positive_int(os.getenv("FOCUS_INACTIVITY_DAYS", "14"))
+
     if reminders_enabled and reminder_chat_id is None:
         raise ValueError("REMINDER_CHAT_ID is required when REMINDERS_ENABLED is true")
 
@@ -86,6 +107,13 @@ def load_config() -> Config:
         reminder_hour=reminder_hour,
         reminder_minute=reminder_minute,
         reminder_message=reminder_message,
+        focus_reminders_enabled=focus_reminders_enabled,
+        focus_reminder_day_of_week=focus_reminder_day_of_week,
+        focus_reminder_hour=focus_reminder_hour,
+        focus_reminder_minute=focus_reminder_minute,
+        focus_reminder_message=focus_reminder_message,
+        focus_upcoming_window_days=focus_upcoming_window_days,
+        focus_inactivity_days=focus_inactivity_days,
     )
 
 
@@ -133,6 +161,16 @@ def _parse_time(value: str) -> tuple[int, int]:
         raise ValueError("REMINDER_TIME must be a valid 24h time between 00:00 and 23:59")
 
     return hour, minute
+
+
+def _parse_positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:  # noqa: BLE001
+        raise ValueError("Provide a valid integer value for reminder windows") from exc
+    if parsed < 1:
+        raise ValueError("Reminder windows must be positive integers")
+    return parsed
 
 
 def _validate_timezone(value: str) -> None:
