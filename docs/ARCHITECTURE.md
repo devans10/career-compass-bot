@@ -180,7 +180,12 @@ Standard logging setup for the bot:
    goal mappings, competencies, milestones, and reminder settings as needed.
 4. Results are formatted into a summary with bullet points and goal/competency
    labels when present.
-5. Bot returns the summary to the user.
+5. When `AI_SUMMARY_ENABLED=true` and both `AI_API_KEY` and `AI_MODEL` are
+   configured, `ai_summarizer.py` builds a deterministic prompt and sends the
+   entry text (including tags, goal titles, and competency labels) to the
+   configured OpenAI-compatible endpoint for a condensed paragraph. Failures or
+   opt-outs fall back to the built-in formatter.
+6. Bot returns the summary to the user.
 
 ### Goal Lifecycle, Milestones, and Evaluations
 1. User issues goal commands (`/goal_add`, `/goal_status`, `/goal_edit`,

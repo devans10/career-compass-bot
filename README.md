@@ -12,8 +12,8 @@ Phase 1 focuses on logging and retrieval. Future phases will add goal mapping, c
   (`/log`, `/task`, `/idea`)
 - **Automatic weekly reminders** to capture your progress
 - **Google Sheets storage** for structured, portable record-keeping
-- **Quick summaries** of recent logs  
-  (`/week`, `/month`)
+- **Quick summaries** of recent logs
+  (`/week`, `/month`), with optional **AI-powered** condensing when enabled
 - **Tag extraction** (e.g., `#apim #portal`) for future analytics
 - **Extensible architecture** for future AI integration
 
@@ -132,6 +132,10 @@ Then fill in:
 | TELEGRAM_ALLOWED_USERS      | Optional comma-separated list of Telegram user IDs allowed to interact with the bot (e.g., `12345,67890`) |
 | SERVICE_ACCOUNT_FILE        | Path to your service account JSON file (required if SERVICE_ACCOUNT_JSON is not set) |
 | SERVICE_ACCOUNT_JSON        | Raw JSON string for service account credentials (required if SERVICE_ACCOUNT_FILE is not set) |
+| AI_SUMMARY_ENABLED          | Set to `true` to enable AI-powered `/week` and `/month` summaries (defaults to `false`) |
+| AI_API_KEY                  | API key for your LLM provider (required when AI summaries are enabled) |
+| AI_MODEL                    | Model name to use with the provider (e.g., `gpt-4o-mini`) |
+| AI_ENDPOINT                 | Optional custom base URL for the AI provider (useful for gateways or self-hosted endpoints) |
 | LOG_LEVEL                   | Logging level (INFO by default) |
 | TIMEZONE                    | IANA timezone for scheduling/logging (e.g., America/New_York or UTC) |
 | REMINDERS_ENABLED           | Set to `false` to disable scheduled reminders |
@@ -139,6 +143,20 @@ Then fill in:
 | REMINDER_DAY_OF_WEEK        | Day to send reminders (`mon`–`sun`) |
 | REMINDER_TIME               | Time to send reminders in 24h `HH:MM` format |
 | REMINDER_MESSAGE            | Custom reminder text |
+
+#### AI-powered summaries for `/week` and `/month`
+
+AI summarization is **opt-in** and off by default. To enable concise AI-written responses for `/week` and `/month`:
+
+1. Set `AI_SUMMARY_ENABLED=true`.
+2. Provide `AI_API_KEY` and `AI_MODEL` for your provider (OpenAI-compatible SDK is assumed). Optionally point to a gateway with `AI_ENDPOINT`.
+3. Restart the bot so the configuration is picked up.
+
+Privacy and control:
+
+- Enabling AI summaries sends the text of your recent entries — including tags, goal links, and competency labels — to the configured provider to generate the response.
+- No prompts or responses are persisted by the bot; storage remains in your Google Sheet. Review your provider’s data retention policies.
+- Set `AI_SUMMARY_ENABLED=false` (or omit the AI variables) to skip AI calls and fall back to the built-in summarizer at any time.
 
 ### 6. Run the bot locally
 
