@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -193,7 +194,6 @@ def test_append_goal_mapping_and_read_back():
             "entrytimestamp": "2024-06-01T12:00:00Z",
             "entrydate": "2024-06-01",
             "goal_id": "G-123",
-            "competency_id": "C-456",
             "notes": "Linked",
         }
     )
@@ -203,6 +203,25 @@ def test_append_goal_mapping_and_read_back():
     assert len(mappings) == 1
     assert mappings[0]["goalid"] == "G-123"
     assert service.ensure_sheet("GoalMappings")["values"][-1][0] == "2024-06-01T12:00:00Z"
+
+
+def test_append_competency_mapping_and_read_back():
+    service = FakeSheetsService()
+    service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    client.append_goal_mapping(
+        {
+            "entrytimestamp": "2024-06-02T12:00:00Z",
+            "entrydate": "2024-06-02",
+            "competency_id": "C-456",
+            "notes": "Competency focus",
+        }
+    )
+
+    mappings = client.get_goal_mappings()
+
+    assert mappings[0]["competencyid"] == "C-456"
 
 
 def test_append_goal_and_competency_validation():
@@ -229,10 +248,27 @@ def test_goal_mapping_requires_goal_or_competency():
     service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
     client = GoogleSheetsClient("spreadsheet-id", service=service)
 
-    with pytest.raises(ValueError, match="requires at least a GoalID or CompetencyID"):
+    with pytest.raises(ValueError, match="requires at least one of GoalID or CompetencyID"):
         client.append_goal_mapping(
             {"entrytimestamp": "2024-06-01T12:00:00Z", "entrydate": "2024-06-01"}
         )
+
+    client.append_goal_mapping(
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "C-1",
+        }
+    )
+
+    assert service.ensure_sheet("GoalMappings")["values"][-1] == [
+        "2024-06-01T12:00:00Z",
+        "2024-06-01",
+        "G-1",
+        "C-1",
+        "",
+    ]
 
 
 def test_trimmed_rows_are_padded_for_goal_related_sheets():
@@ -372,6 +408,31 @@ def test_goal_mapping_header_and_date_validation():
 
     with pytest.raises(ValueError, match="must match %Y-%m-%d"):
         client.get_goal_mappings()
+
+
+def test_goal_mappings_accepts_legacy_goal_and_competency_rows(caplog):
+    service = FakeSheetsService()
+    sheet = service.ensure_sheet("GoalMappings")
+    sheet["header"] = GOAL_MAPPING_HEADERS
+    sheet["values"].append(
+        ["2024-06-01T12:00:00Z", "2024-06-01", "G-1", "C-1", "Legacy link"]
+    )
+
+    client = GoogleSheetsClient("spreadsheet-id", service=service)
+
+    with caplog.at_level(logging.WARNING):
+        mappings = client.get_goal_mappings()
+
+    assert mappings == [
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "C-1",
+            "notes": "Legacy link",
+        }
+    ]
+    assert any("legacy dual-link" in message for message in caplog.messages)
 
 
 def test_load_credentials_validates_service_account_json(monkeypatch):

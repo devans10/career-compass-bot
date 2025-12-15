@@ -866,9 +866,17 @@ class GoogleSheetsClient:
             row_number=row_number,
             allow_empty=False,
         )
-        if not record.get("goalid") and not record.get("competencyid"):
+        goal_id = record.get("goalid")
+        competency_id = record.get("competencyid")
+        if goal_id and competency_id:
+            logger.warning(
+                "GoalMappings row contains both GoalID and CompetencyID; treating as a "
+                "legacy dual-link row (sheet 'GoalMappings', row %s)",
+                row_number,
+            )
+        if not goal_id and not competency_id:
             raise ValueError(
-                "GoalMappings row requires at least a GoalID or CompetencyID "
+                "GoalMappings row requires exactly one of GoalID or CompetencyID "
                 f"(sheet 'GoalMappings', row {row_number})"
             )
         return record
@@ -1075,9 +1083,7 @@ class GoogleSheetsClient:
             or mapping.get("competency", "")
         )
         if not goal_id and not competency_id:
-            raise ValueError(
-                "GoalMappings append requires at least a GoalID or CompetencyID"
-            )
+            raise ValueError("GoalMappings append requires at least one of GoalID or CompetencyID")
 
     @staticmethod
     def _validate_status(value: str, allowed: set[str], sheet_name: str, row_number: int) -> None:
