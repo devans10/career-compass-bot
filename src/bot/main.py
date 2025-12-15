@@ -1,9 +1,8 @@
 import logging
 
-import logging
-
 from telegram.ext import Application, ApplicationBuilder
 
+from src.bot.ai_client import AIClient
 from src.bot.handlers import register_handlers
 from src.bot.scheduler import start_scheduler_from_config
 from src.config import load_config
@@ -42,6 +41,22 @@ def build_application() -> Application:
             logger.exception("Failed to initialize storage client")
     else:
         logger.warning("SPREADSHEET_ID not configured; storage features will be unavailable")
+
+    if config.ai_api_key and config.ai_model:
+        ai_client = AIClient(
+            api_key=config.ai_api_key,
+            model=config.ai_model,
+            endpoint=config.ai_endpoint,
+        )
+        application.bot_data["ai_client"] = ai_client
+        logger.info(
+            "AI client initialized",
+            extra={"ai_model": config.ai_model, "ai_endpoint": config.ai_endpoint},
+        )
+    elif any((config.ai_api_key, config.ai_model, config.ai_endpoint)):
+        logger.warning(
+            "AI provider configuration is incomplete; provide AI_API_KEY and AI_MODEL to enable it",
+        )
 
     logger.info("Telegram application initialized")
     start_scheduler_from_config(application, config)

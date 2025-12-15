@@ -16,6 +16,9 @@ class Config:
     telegram_allowed_users: tuple[int, ...] = ()
     service_account_file: Optional[str] = None
     service_account_json: Optional[str] = None
+    ai_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_endpoint: Optional[str] = None
     log_level: str = "INFO"
     timezone: str = "UTC"
     reminders_enabled: bool = True
@@ -40,6 +43,9 @@ def load_config() -> Config:
     telegram_allowed_users = _parse_int_list(os.getenv("TELEGRAM_ALLOWED_USERS"))
     service_account_file = os.getenv("SERVICE_ACCOUNT_FILE")
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
+    ai_api_key = os.getenv("AI_API_KEY")
+    ai_model = os.getenv("AI_MODEL")
+    ai_endpoint = os.getenv("AI_ENDPOINT")
     if not (service_account_file or service_account_json):
         raise ValueError(
             "Provide SERVICE_ACCOUNT_FILE or SERVICE_ACCOUNT_JSON for Google Sheets access",
@@ -69,6 +75,9 @@ def load_config() -> Config:
         telegram_allowed_users=telegram_allowed_users,
         service_account_file=service_account_file,
         service_account_json=service_account_json,
+        ai_api_key=ai_api_key,
+        ai_model=ai_model,
+        ai_endpoint=ai_endpoint,
         log_level=log_level,
         timezone=timezone,
         reminders_enabled=reminders_enabled,
