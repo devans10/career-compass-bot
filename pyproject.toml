@@ -22,12 +22,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "APScheduler>=3.10.4",
     "pytz>=2024.1",
-]
-
-#Optional: If you want AI rewriting/summarization in Phase 2
-#Uncomment when ready
-dependencies += [
-    "openai>=1.0.0"
+    "openai>=1.0.0",
 ]
 
 [project.optional-dependencies]
