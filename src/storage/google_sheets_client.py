@@ -1082,10 +1082,8 @@ class GoogleSheetsClient:
             or mapping.get("competency_id")
             or mapping.get("competency", "")
         )
-        if goal_id and competency_id:
-            raise ValueError("GoalMappings append accepts either a GoalID or CompetencyID, not both")
         if not goal_id and not competency_id:
-            raise ValueError("GoalMappings append requires exactly one of GoalID or CompetencyID")
+            raise ValueError("GoalMappings append requires at least one of GoalID or CompetencyID")
 
     @staticmethod
     def _validate_status(value: str, allowed: set[str], sheet_name: str, row_number: int) -> None:

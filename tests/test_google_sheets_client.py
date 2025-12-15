@@ -248,20 +248,27 @@ def test_goal_mapping_requires_goal_or_competency():
     service.ensure_sheet("GoalMappings")["header"] = GOAL_MAPPING_HEADERS
     client = GoogleSheetsClient("spreadsheet-id", service=service)
 
-    with pytest.raises(ValueError, match="requires exactly one of GoalID or CompetencyID"):
+    with pytest.raises(ValueError, match="requires at least one of GoalID or CompetencyID"):
         client.append_goal_mapping(
             {"entrytimestamp": "2024-06-01T12:00:00Z", "entrydate": "2024-06-01"}
         )
 
-    with pytest.raises(ValueError, match="either a GoalID or CompetencyID, not both"):
-        client.append_goal_mapping(
-            {
-                "entrytimestamp": "2024-06-01T12:00:00Z",
-                "entrydate": "2024-06-01",
-                "goalid": "G-1",
-                "competencyid": "C-1",
-            }
-        )
+    client.append_goal_mapping(
+        {
+            "entrytimestamp": "2024-06-01T12:00:00Z",
+            "entrydate": "2024-06-01",
+            "goalid": "G-1",
+            "competencyid": "C-1",
+        }
+    )
+
+    assert service.ensure_sheet("GoalMappings")["values"][-1] == [
+        "2024-06-01T12:00:00Z",
+        "2024-06-01",
+        "G-1",
+        "C-1",
+        "",
+    ]
 
 
 def test_trimmed_rows_are_padded_for_goal_related_sheets():
