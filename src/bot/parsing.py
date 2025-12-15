@@ -50,6 +50,20 @@ def build_goal_competency_mappings(
 
     mappings: List[Dict[str, str]] = []
 
+    if goal_ids and competency_ids:
+        for goal_id in goal_ids:
+            for competency_id in competency_ids:
+                mappings.append(
+                    {
+                        "entrytimestamp": entry_timestamp,
+                        "entrydate": entry_date,
+                        "goalid": goal_id,
+                        "competencyid": competency_id,
+                        "notes": "",
+                    }
+                )
+        return mappings
+
     for goal_id in goal_ids:
         mappings.append(
             {
