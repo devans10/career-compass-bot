@@ -16,9 +16,11 @@ The current release supports:
   metadata when available.
 - Goal lifecycle management (add, edit, status change, archive, supersede),
   milestone tracking, and evaluation/review recording.
+- Optional AI-powered summaries for `/week` and `/month` when configured with an
+  OpenAI-compatible provider.
 
-Upcoming phases will add AI-powered summarization, richer analytics, and
-coaching suggestions.
+Upcoming phases will deepen coaching automation, analytics, and import/export
+tooling.
 
 ---
 
@@ -33,7 +35,10 @@ Bot Application (Python)
     - Command parsing (/log, /task, /goal_add, /goal_milestone_add, /week, /month, /reminder_settings, ...)
     - Message handling
     - Scheduling weekly reminders
+    - AI summarization (optional)
     - Storage operations and goal/competency enrichment
+    ↓
+AI Provider (OpenAI-compatible, optional)
     ↓
 Google Sheets (Spreadsheet)
     - "Accomplishments" sheet
@@ -82,6 +87,12 @@ Google Sheets (Spreadsheet)
   - Normalizing entry metadata and building goal/competency mappings.
   - Parsing goal lifecycle edits, milestone payloads, reviews, and reminder
     settings with validation.
+
+**ai_client.py** and **ai_summarizer.py**
+- Optional AI integration used by `/week` and `/month`.
+- Builds deterministic prompts that include goals, competencies, and tags.
+- Calls an OpenAI-compatible provider when `AI_SUMMARY_ENABLED=true`, with a
+  graceful fallback to the built-in summarizer on errors.
 
 ---
 
@@ -209,8 +220,9 @@ Standard logging setup for the bot:
 ---
 
 ### Phases and Extensibility
-**Current:** Logging, retrieval, weekly reminders, goal/competency lifecycle,
-linking, milestones, and evaluation/review capture backed by Google Sheets.
+**Current:** Logging, retrieval (with optional AI summaries), weekly reminders,
+goal/competency lifecycle, linking, milestones, and evaluation/review capture
+backed by Google Sheets.
 
 **Future:** AI-powered summaries and coaching prompts, richer analytics and
 visualizations, automated action suggestions, and potential decomposition into
