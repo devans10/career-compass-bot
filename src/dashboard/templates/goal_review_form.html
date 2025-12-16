@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Submit a goal review</h2>
+    <form method="post" class="form">
+      <div class="form-grid">
+        <div>
+          <label for="goal_id">Goal ID *</label>
+          <input required type="text" name="goal_id" id="goal_id" value="{{ form_data.goal_id or '' }}" placeholder="G-2024-01" />
+        </div>
+        <div>
+          <label for="review_type">Review type</label>
+          <select name="review_type" id="review_type">
+            {% for option in review_types %}
+              <option value="{{ option }}" {% if form_data.review_type == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="rating">Rating</label>
+          <select name="rating" id="rating">
+            {% for option in ratings %}
+              <option value="{{ option }}" {% if form_data.rating == option %}selected{% endif %}>{{ option or 'Select rating (optional)' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="reviewed_on">Reviewed on</label>
+          <input type="date" name="reviewed_on" id="reviewed_on" value="{{ form_data.reviewed_on or '' }}" />
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="notes">Notes</label>
+        <textarea name="notes" id="notes" placeholder="Wins, risks, and next steps">{{ form_data.notes or '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit">Submit review</button>
+        <a class="button-link secondary" href="/">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

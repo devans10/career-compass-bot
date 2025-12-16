@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Add a milestone</h2>
+    <form method="post" class="form">
+      <div class="form-grid">
+        <div>
+          <label for="goal_id">Goal ID *</label>
+          <input required type="text" name="goal_id" id="goal_id" value="{{ form_data.goal_id or '' }}" placeholder="G-2024-01" />
+        </div>
+        <div>
+          <label for="title">Title *</label>
+          <input required type="text" name="title" id="title" value="{{ form_data.title or '' }}" placeholder="Ship onboarding beta" />
+        </div>
+        <div>
+          <label for="target_date">Target date</label>
+          <input type="date" name="target_date" id="target_date" value="{{ form_data.target_date or '' }}" />
+        </div>
+        <div>
+          <label for="completion_date">Completion date</label>
+          <input type="date" name="completion_date" id="completion_date" value="{{ form_data.completion_date or '' }}" />
+        </div>
+        <div>
+          <label for="status_value">Status</label>
+          <select name="status_value" id="status_value">
+            {% for status in statuses %}
+              <option value="{{ status }}" {% if form_data.status_value == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="notes">Notes</label>
+        <textarea name="notes" id="notes" placeholder="What is needed to complete this milestone?">{{ form_data.notes or '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit">Save milestone</button>
+        <a class="button-link secondary" href="/">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
