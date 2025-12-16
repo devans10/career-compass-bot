@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Quick actions</h2>
+    <p>Capture detailed updates directly into Google Sheets without juggling bot commands.</p>
+    <div class="actions">
+      <a class="button-link" href="/entries/new">Log an entry</a>
+      <a class="button-link" href="/goals/new">Create a goal</a>
+      <a class="button-link" href="/goals/milestones/new">Add milestone</a>
+      <a class="button-link" href="/reviews/goal">Submit goal review</a>
+      <a class="button-link" href="/evaluations/competency">Competency check-in</a>
+    </div>
+  </div>
+  <div class="card">
+    <h2>What this dashboard does</h2>
+    <ul>
+      <li>Creates structured goals with statuses, target dates, and notes.</li>
+      <li>Captures goal milestones and review snapshots for longer-form reflections.</li>
+      <li>Logs accomplishments, tasks, ideas, and reflections with rich text.</li>
+      <li>Writes directly to the same Google Sheets that power the Telegram bot.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Usage tips</h2>
+    <ul>
+      <li>Keep IDs consistent with your bot workflow (e.g., <code>G-2024-01</code>).</li>
+      <li>Dates accept YYYY-MM-DD; leave blank if you do not have a target yet.</li>
+      <li>Statuses are validated before saving to avoid breaking the Sheets schema.</li>
+    </ul>
+  </div>
+{% endblock %}

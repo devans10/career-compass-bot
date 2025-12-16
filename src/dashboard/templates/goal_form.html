@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <h2>Create a goal</h2>
+    <form method="post" class="form">
+      <div class="form-grid">
+        <div>
+          <label for="title">Title *</label>
+          <input required type="text" name="title" id="title" value="{{ form_data.title or '' }}" placeholder="Launch the new onboarding flow" />
+        </div>
+        <div>
+          <label for="goal_id">Goal ID</label>
+          <input type="text" name="goal_id" id="goal_id" value="{{ form_data.goal_id or '' }}" placeholder="G-2024-01" />
+        </div>
+        <div>
+          <label for="status_value">Status</label>
+          <select name="status_value" id="status_value">
+            {% for status in statuses %}
+              <option value="{{ status }}" {% if form_data.status_value == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="target_date">Target date</label>
+          <input type="date" name="target_date" id="target_date" value="{{ form_data.target_date or '' }}" />
+        </div>
+        <div>
+          <label for="owner">Owner</label>
+          <input type="text" name="owner" id="owner" value="{{ form_data.owner or '' }}" placeholder="Your name" />
+        </div>
+        <div>
+          <label for="completion_percentage">Completion %</label>
+          <input type="text" name="completion_percentage" id="completion_percentage" value="{{ form_data.completion_percentage or '' }}" placeholder="0" />
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" placeholder="Context, success definition, and guardrails">{{ form_data.description or '' }}</textarea>
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="notes">Notes</label>
+        <textarea name="notes" id="notes" placeholder="Dependencies, stakeholders, known risks">{{ form_data.notes or '' }}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit">Save goal</button>
+        <a class="button-link secondary" href="/">Back</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

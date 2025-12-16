@@ -253,6 +253,19 @@ and the in-process scheduler when `REMINDERS_ENABLED=true`. To use an external c
 disable the scheduler via `REMINDERS_ENABLED=false` and invoke the image on your schedule with
 the same command.
 
+### 9. Lightweight web dashboard
+
+An experimental FastAPI dashboard is included for longer-form updates (goals, milestones,
+reviews, and richer entries) backed by the same Google Sheets storage. Launch it locally with:
+
+```bash
+uvicorn src.dashboard.app:create_app --factory --host 0.0.0.0 --port 8000
+```
+
+The dashboard uses your existing `.env` (including the service account settings) and writes to
+the same sheets as the Telegram bot. Keep it bound to `localhost` unless you add authentication
+in front of it.
+
 ## 📈 Operations & Monitoring
 
 - **Logs:** All components log to standard output with timezone-aware timestamps. For containers,
